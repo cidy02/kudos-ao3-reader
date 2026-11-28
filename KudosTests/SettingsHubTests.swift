@@ -21,9 +21,9 @@ struct SettingsHubTests {
         #endif
         let expected: [(String, [SettingsRoute])] = [
             ("Reading", reading),
-            ("Downloads & Storage", [.downloads, .preservation, .readingQueues]),
-            ("Library & Sync", [.library, .backup, .syncFolder, .importFiles]),
-            ("Account & Privacy", [.account, .privacySettings]),
+            ("Downloads & storage", [.downloads, .preservation, .readingQueues]),
+            ("Library & sync", [.library, .backup, .syncFolder, .importFiles]),
+            ("Account & privacy", [.account, .privacySettings]),
             ("About", [.about])
         ]
         #expect(groups.map(\.0) == expected.map(\.0))
@@ -120,19 +120,19 @@ struct SettingsHubTests {
                 .appearance: "Dark, Sepia reader", .font: "Georgia", .reader: "Paged",
                 .listening: "Kokoro · Bella",
                 .downloads: "On subscribe", .readingQueues: "Auto up to 7 works", .syncFolder: "Paused",
-                .account: "reader", .privacySettings: "Off", .about: Changelog.currentVersion
+                .account: "reader", .privacySettings: "Off", .about: "Version \(Changelog.currentVersion)"
             ]),
             (second, [
                 .appearance: "OLED", .font: "Menlo", .reader: "Scrolled",
                 .listening: "Apple · Samantha",
                 .downloads: "Manual", .readingQueues: "Auto up to 3 works", .syncFolder: "On",
-                .account: "Not signed in", .privacySettings: "Off", .about: Changelog.currentVersion
+                .account: "Not signed in", .privacySettings: "Off", .about: "Version \(Changelog.currentVersion)"
             ]),
             (third, [
                 .appearance: "Sepia", .font: "System", .reader: "Paged",
                 .listening: "Automatic",
                 .downloads: "On subscribe", .readingQueues: "Ask first", .syncFolder: "Off",
-                .account: "Checking…", .privacySettings: "Hide mature works", .about: Changelog.currentVersion
+                .account: "Checking…", .privacySettings: "Hide mature works", .about: "Version \(Changelog.currentVersion)"
             ])
         ]
         for (inputs, expected) in cases {
@@ -232,6 +232,29 @@ struct SettingsHubTests {
 
         // Non-matching query
         #expect(!SettingsRoute.font.matches(query: "xyznonexistent", currentValue: "Georgia"))
+    }
+
+    /// Report a Bug is not a route. Searching its title used to drop the About
+    /// group, so the row was gone for the words on the row itself.
+    @Test func reportBugRowStaysReachableWhenTheQueryIsItsOwnTitle() {
+        let titled = SettingsHubFilter.sections(matching: "Report a Bug") { _ in "" }
+        let about = titled.first { $0.title == "About" }
+        #expect(about?.showsReportBug == true)
+        #expect(about?.routes.contains(.about) == false)
+
+        let partial = SettingsHubFilter.sections(matching: "report a") { _ in "" }
+        #expect(partial.first { $0.title == "About" }?.showsReportBug == true)
+
+        let version = SettingsHubFilter.sections(matching: "version") { _ in "" }
+        #expect(version.first { $0.title == "About" }?.routes.contains(.about) == true)
+        #expect(version.first { $0.title == "About" }?.showsReportBug == false)
+
+        let storage = SettingsHubFilter.sections(matching: "storage") { _ in "" }
+        #expect(storage.contains { $0.title == "About" } == false)
+
+        let idle = SettingsHubFilter.sections(matching: "") { _ in "" }
+        #expect(idle.map(\.title) == SettingsRoute.hubGroups.map(\.title))
+        #expect(idle.first { $0.title == "About" }?.showsReportBug == true)
     }
 
     @Test func hubFirstSectionFooterCarriesFactAndVoiceOverValue() {

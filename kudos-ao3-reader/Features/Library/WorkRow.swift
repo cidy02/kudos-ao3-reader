@@ -238,23 +238,21 @@ struct WorkRow: View {
             wide: wide || summaryRunsFullWidth,
             showsSeparator: showsSeparator,
             separatorInset: Self.separatorInset(isSelecting: isSelecting),
+            insertsByline: !work.author.isEmpty,
             showsUnderTitleTrailing: showsLedgerTrailing
         ) {
             selectionCheck
         } symbols: { arrangement in
             symbols(arrangement)
         } heading: { includesTrailing in
-            // The author already leads the remainder unless the summary runs full
-            // width, which is Beside the Title only. Leave it there.
             ledgerHeading(
-                includesByline: includesTrailing && summaryRunsFullWidth,
+                includesByline: includesTrailing,
                 includesTrailing: includesTrailing
             )
         } byline: {
-            EmptyView()
+            ledgerByline
         } remainder: {
             fullWidthSummaryRemainder(enabled: summaryRunsFullWidth) {
-                if !summaryRunsFullWidth { ledgerByline }
                 if !ledgerSummaryText.isEmpty {
                     Text(ledgerSummaryText)
                         .font(.subheadline)
@@ -265,6 +263,7 @@ struct WorkRow: View {
                 }
                 WorkLedgerStatsLine(figures: ledgerFigures)
                 WorkChapterBarLine(layout: chapterBarLayout, label: chapterProgressLabel)
+                    .padding(.top, 2)
             }
         } trailing: {
             if showsLedgerTrailing {
@@ -308,7 +307,7 @@ struct WorkRow: View {
             AO3AuthorBylineView(
                 displayText: work.author,
                 identities: work.verifiedAuthorIdentities,
-                font: .subheadline,
+                font: .footnote,
                 compact: !dynamicTypeSize.isAccessibilitySize
             )
             .fixedSize(horizontal: false, vertical: true)
@@ -475,7 +474,7 @@ struct WorkRow: View {
             categories: work.workCategories,
             warnings: work.workWarnings,
             completion: work.completionStatus,
-            tileSize: Self.ledgerTileSize,
+            tileSize: arrangement == .row ? 18 : Self.ledgerTileSize,
             announcesToVoiceOver: true,
             arrangement: arrangement
         )
@@ -520,7 +519,7 @@ struct WorkRow: View {
             AO3AuthorBylineView(
                 displayText: work.author,
                 identities: work.verifiedAuthorIdentities,
-                font: .subheadline,
+                font: .footnote,
                 compact: !dynamicTypeSize.isAccessibilitySize
             )
             // Sort New only (the same flag as its stacked trailing controls): on the

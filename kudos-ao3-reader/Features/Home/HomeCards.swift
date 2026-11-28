@@ -438,16 +438,20 @@ private struct WorkSummaryCardSurface<Content: View>: View {
     /// Set by the enclosing carousel/grid so every card there matches the tallest.
     /// `nil` in a container that doesn't coordinate — the card keeps its own floor.
     @Environment(\.uniformWorkCardHeight) private var uniformHeight
+    @Environment(ThemeManager.self) private var themeManager: ThemeManager?
 
     var body: some View {
+        let coverShadow = themeManager?.appTheme.carouselCardShadow ?? ReaderTheme.light.carouselCardShadow
         VStack(alignment: .leading, spacing: 6) {
             GeneratedCoverView(recipe: recipe, width: cardSize.width,
                                epubURL: showsInitial ? epubURL : nil,
                                epubWorkID: showsInitial ? epubWorkID : nil,
                                showsWords: showsInitial, showsArt: showsInitial,
+                               cornerRadius: SubjectMetrics.cornerRadius,
                                coverArtPreference: coverArtPreference)
             .frame(width: cardSize.width, height: cardSize.width * 1.42)
-            .blur(radius: isMatureObscured ? 6 : 0)
+            .blur(radius: isMatureObscured ? 7 : 0)
+            .shadow(color: coverShadow.color, radius: coverShadow.radius, x: 0, y: coverShadow.y)
             .overlay {
                 if isMatureObscured && showsMatureRevealCapsule {
                     MatureRevealCapsule()

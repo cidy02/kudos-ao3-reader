@@ -25,6 +25,7 @@ struct LibraryEditShelvesSheet: View {
                     .onMove(perform: moveSections)
                 } header: {
                     Text("On the Library page")
+                        .textCase(nil)
                 }
                 .appThemedRows()
 
@@ -40,6 +41,7 @@ struct LibraryEditShelvesSheet: View {
                     .onMove(perform: moveButtons)
                 } header: {
                     Text("As shelf buttons")
+                        .textCase(nil)
                 }
                 .appThemedRows()
 

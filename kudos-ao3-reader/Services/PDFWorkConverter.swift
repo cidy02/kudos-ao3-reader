@@ -405,6 +405,12 @@ nonisolated enum PDFWorkConverter {
         (action as? PDFActionGoTo)?.destination.page
     }
 
+    /// Stands in for a scene break so the plain-text converter does not treat `* * *` as a chapter heading.
+    /// Only a paragraph that is this character is restored: the character can occur in real PDF text, and replacing
+    /// every occurrence would turn that text into `* * *` here while the outline path left it alone.
+    /// `HTMLWorkSanitizer.paragraphs` keeps it (it escapes `& < > " '` only), so the paragraph still matches.
+    private static let sceneBreakPlaceholder = "\u{E000}"
+
     /// No outline: flatten the whole document and reuse the plain-text converter's
     /// chapter heuristics, so PDFs and `.txt` files split on the same rules and
     /// there is only one place where "what looks like a chapter heading" is decided.
@@ -412,14 +418,23 @@ nonisolated enum PDFWorkConverter {
         pageBlocks: [[PDFStyledBlock]],
         fallbackTitle: String
     ) -> [EPUBBuilder.Chapter] {
+        // `PlainTextWorkConverter` treats a `* * *` line as a chapter divider (right for .txt imports), which would turn
+        // every scene break in a PDF without an outline into a new untitled chapter; a placeholder carries each break
+        // through and becomes `* * *` again in the chapter body.
+        let separator = PDFParagraphRepair.normalizedSeparator
         let blocks = pageBlocks
             .flatMap(\.self)
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .map { $0.text == separator ? PDFStyledBlock(text: sceneBreakPlaceholder) : $0 }
         guard let result = try? PlainTextWorkConverter.convert(
             blocks: blocks,
             fallbackTitle: fallbackTitle
         ) else { return [] }
-        return result.chapters
+        let marker = "<p>\(sceneBreakPlaceholder)</p>"
+        let restored = "<p>\(separator)</p>"
+        return result.chapters.map {
+            .init(title: $0.title, bodyXHTML: $0.bodyXHTML.replacingOccurrences(of: marker, with: restored))
+        }
     }
 
     // MARK: - Metadata

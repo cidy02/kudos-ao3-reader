@@ -140,19 +140,22 @@ nonisolated enum PDFParagraphRepair {
     private static let ornamentCharacters: Set<Character> = Set("oO0xX")
     private static let ornamentLetters: Set<Character> = Set("oOxX")
 
-    /// Punctuation that belongs to prose rather than decorative dividers, so cut-off
-    /// dialogue like `“—”` is never mistaken for a scene break.
-    private static let proseOnlyPunctuation: Set<Character> = Set("\"'“”‘’«»‹›,;?!")
-
     private static let closingDelimiters: Set<Character> = Set("\"”'’)]»›")
     private static let closingQuotes: Set<Character> = Set("\"”'’»›")
     private static let terminalPunctuation: Set<Character> = Set(".!?…")
     private static let openingQuotes: Set<Character> = Set("\"“'‘«‹")
     private static let hyphensAndDashes: Set<Character> = Set("-–—")
 
+    /// Whole-line headings that `chapter` / `part` patterns miss. Matched as the
+    /// entire block, or `epilogue: subtitle`, so "the epilogue" still joins.
+    private static let standaloneHeadings: Set<String> = [
+        "prologue", "epilogue", "interlude", "preface", "afterword"
+    ]
+
     /// Runs the full cleanup pipeline: removes running headers, footers, and bare
     /// page numbers while sparing separators, then normalises separators and rejoins
-    /// paragraphs split across page breaks.
+    /// paragraphs split across page breaks. Page count stays the same so outline
+    /// slices still line up with PDF page indexes.
     static func repair(_ pages: [[String]]) -> [[String]] {
         repair(pages.map { $0.map { PDFStyledBlock(text: $0) } }).map { $0.map(\.text) }
     }
@@ -167,7 +170,9 @@ nonisolated enum PDFParagraphRepair {
     ///
     /// A repeated header or footer is removed only where it sits as the first or last
     /// non-empty block of a page, never mid-page, and scene-break separators are
-    /// never removed regardless of how often they land on a page edge.
+    /// never removed regardless of how often they land on a page edge. A sentence
+    /// that repeats there is a refrain, not a footer. The first copy of a repeated
+    /// chapter heading stays; later copies are the running header.
     static func withoutRunningHeadersAndFooters(_ pages: [[String]]) -> [[String]] {
         withoutRunningHeadersAndFooters(pages.map { $0.map { PDFStyledBlock(text: $0) } })
             .map { $0.map(\.text) }
@@ -176,24 +181,28 @@ nonisolated enum PDFParagraphRepair {
     static func withoutRunningHeadersAndFooters(_ pages: [[PDFStyledBlock]]) -> [[PDFStyledBlock]] {
         guard pages.count >= 4 else { return pages }
 
-        // Strip bare page numbers first so a running footer sitting directly above a
-        // page number still sits at the page edge when frequencies are counted.
+        // Strip bare page numbers at the edges first so a running footer sitting
+        // directly above a page number still sits at the page edge when frequencies
+        // are counted. A year or list number in the body is not a page number.
         let withoutPageNumbers: [[PDFStyledBlock]] = pages.map { page in
-            page.filter { block in
+            guard let edges = edgeIndices(of: page) else { return page }
+            return page.enumerated().compactMap { index, block -> PDFStyledBlock? in
+                guard index == edges.first || index == edges.last else { return block }
                 let trimmed = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed.isEmpty { return true }
-                return !isBarePageNumber(trimmed)
+                if trimmed.isEmpty { return block }
+                return isBarePageNumber(trimmed) ? nil : block
             }
         }
 
+        // One pass per page: a line that is both the header and the footer counts once.
         var edgeCounts: [String: Int] = [:]
         for page in withoutPageNumbers {
             guard let edges = edgeIndices(of: page) else { continue }
             let firstText = page[edges.first].text.trimmingCharacters(in: .whitespacesAndNewlines)
             let lastText = page[edges.last].text.trimmingCharacters(in: .whitespacesAndNewlines)
             var candidates: Set<String> = []
-            if !isSeparator(firstText) { candidates.insert(firstText) }
-            if !isSeparator(lastText) { candidates.insert(lastText) }
+            if isRepeatedEdgeCandidate(firstText) { candidates.insert(firstText) }
+            if isRepeatedEdgeCandidate(lastText) { candidates.insert(lastText) }
             for candidate in candidates {
                 edgeCounts[candidate, default: 0] += 1
             }
@@ -204,17 +213,31 @@ nonisolated enum PDFParagraphRepair {
         let repeated = Set(edgeCounts.filter { $0.value >= threshold }.keys)
         guard !repeated.isEmpty else { return withoutPageNumbers }
 
-        return withoutPageNumbers.map { page in
-            guard let edges = edgeIndices(of: page) else { return page }
-            return page.enumerated().compactMap { index, block -> PDFStyledBlock? in
-                guard index == edges.first || index == edges.last else { return block }
-                let trimmed = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !isSeparator(trimmed), repeated.contains(trimmed) {
-                    return nil
-                }
-                return block
+        var keptHeading: Set<String> = []
+        var cleaned: [[PDFStyledBlock]] = []
+        cleaned.reserveCapacity(withoutPageNumbers.count)
+        for page in withoutPageNumbers {
+            guard let edges = edgeIndices(of: page) else {
+                cleaned.append(page)
+                continue
             }
+            var kept: [PDFStyledBlock] = []
+            kept.reserveCapacity(page.count)
+            for (index, block) in page.enumerated() {
+                if index == edges.first || index == edges.last {
+                    let trimmed = block.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty, !isSeparator(trimmed), repeated.contains(trimmed) {
+                        if isExplicitChapterHeading(trimmed), keptHeading.insert(trimmed).inserted {
+                            kept.append(block)
+                        }
+                        continue
+                    }
+                }
+                kept.append(block)
+            }
+            cleaned.append(kept)
         }
+        return cleaned
     }
 
     // MARK: - Paragraph joining & separator normalisation
@@ -282,11 +305,18 @@ nonisolated enum PDFParagraphRepair {
         if endsWithTerminalPunctuation(lhs) { return false }
 
         guard let nextFirst = rhs.first, let lastChar = lhs.last else { return false }
+        // Case is the continuation signal. Han, kana, Arabic and Hebrew letters are
+        // neither lowercase nor uppercase, so a page of those does not join the next.
         let nextStartsLowercase = nextFirst.isLowercase
         let nextStartsUppercase = nextFirst.isUppercase
 
-        if !nextStartsLowercase, isExplicitChapterHeading(lhs) || isExplicitChapterHeading(rhs) {
-            return false
+        // "chapter 3" is a heading even though it starts lowercase. A heading cut
+        // after its colon ("Chapter 1:" / "the return") is still one heading.
+        if isExplicitChapterHeading(rhs) { return false }
+        if isExplicitChapterHeading(lhs) {
+            let titleContinues = nextStartsLowercase
+                && (lastChar == ":" || hyphensAndDashes.contains(lastChar))
+            if !titleContinues { return false }
         }
 
         // Comma or semicolon (including `,"` / `,”` before a dialogue tag) always
@@ -326,23 +356,35 @@ nonisolated enum PDFParagraphRepair {
         trimmed.range(of: #"^[\-–—\s]*\d{1,4}[.\-–—\s]*$"#, options: .regularExpression) != nil
     }
 
+    /// A repeated edge line is a header or footer. A sentence that happens to end
+    /// the page is a refrain. Chapter headings are counted so the first copy can
+    /// be kept and the running copies dropped.
+    private static func isRepeatedEdgeCandidate(_ trimmed: String) -> Bool {
+        if trimmed.isEmpty || isSeparator(trimmed) { return false }
+        if endsWithTerminalPunctuation(trimmed), !isExplicitChapterHeading(trimmed) {
+            return false
+        }
+        return true
+    }
+
     private static func isSymbolSeparator(_ trimmed: String) -> Bool {
-        var hasCoreSymbol = false
+        var coreCount = 0
+        var hyphenOnly = true
         for character in trimmed {
             if character.isWhitespace { continue }
-            if separatorSymbols.contains(character) {
-                hasCoreSymbol = true
-                continue
-            }
-            if proseOnlyPunctuation.contains(character) { return false }
-            guard character.isSymbol || character.isPunctuation else { return false }
+            // A face (`:-)`, `^_^`) or any other prose made of symbols is not a break.
+            guard separatorSymbols.contains(character) else { return false }
+            if character != "-" { hyphenOnly = false }
+            coreCount += 1
         }
-        return hasCoreSymbol
+        // A lone "-" is a bullet, a pause, or a stutter, not a scene break.
+        if hyphenOnly, coreCount < 2 { return false }
+        return coreCount > 0
     }
 
     private static func isOrnamentSeparator(_ trimmed: String) -> Bool {
         var ornamentChars: [Character] = []
-        var hasOrnamentLetter = false
+        var letters = Set<Character>()
         var symbolCount = 0
 
         for character in trimmed {
@@ -350,7 +392,9 @@ nonisolated enum PDFParagraphRepair {
             if ornamentCharacters.contains(character) {
                 ornamentChars.append(character)
                 if ornamentLetters.contains(character) {
-                    hasOrnamentLetter = true
+                    for lowered in character.lowercased() {
+                        letters.insert(lowered)
+                    }
                 }
             } else if separatorSymbols.contains(character) {
                 symbolCount += 1
@@ -359,7 +403,8 @@ nonisolated enum PDFParagraphRepair {
             }
         }
 
-        guard hasOrnamentLetter else { return false }
+        // One letter only: `xXx` / `o0o` / `oOo` are breaks. `Xox`, `oxo` and `ox` are names.
+        guard letters.count == 1 else { return false }
         let hasRepeatingOrnament = Set(ornamentChars.map { $0.lowercased() }).count < ornamentChars.count
 
         if symbolCount == 0 {
@@ -402,16 +447,26 @@ nonisolated enum PDFParagraphRepair {
     }
 
     private static func isExplicitChapterHeading(_ text: String) -> Bool {
+        if isStandaloneHeading(text) { return true }
         if PlainTextWorkConverter.isChapterHeading(text) { return true }
         let stripped = text
             .replacingOccurrences(of: "*", with: "")
             .replacingOccurrences(of: "_", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !stripped.isEmpty, stripped.count <= 100 else { return false }
-        if PlainTextWorkConverter.isChapterHeading(stripped) { return true }
+        if isStandaloneHeading(stripped) || PlainTextWorkConverter.isChapterHeading(stripped) { return true }
         return stripped.range(
             of: #"^part\s+(one|two|three|four|five|six|seven|eight|nine|ten)\s*([:.\-–—]\s*.{0,80})?$"#,
             options: [.regularExpression, .caseInsensitive]
         ) != nil
+    }
+
+    private static func isStandaloneHeading(_ text: String) -> Bool {
+        guard text.count <= 100 else { return false }
+        let lowered = text.lowercased()
+        if standaloneHeadings.contains(lowered) { return true }
+        guard let colon = lowered.firstIndex(of: ":") else { return false }
+        let word = lowered[..<colon].trimmingCharacters(in: .whitespaces)
+        return standaloneHeadings.contains(word)
     }
 }

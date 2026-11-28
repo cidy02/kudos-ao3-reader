@@ -436,32 +436,53 @@ struct ReaderFontSection: View {
         ReaderFontOption.options(customFonts: customFonts)
     }
 
+    /// Renders each built-in reading font in its own typeface, scaling with Dynamic Type.
+    static func previewFont(for option: ReaderFontOption) -> Font {
+        switch option.id {
+        case "nyserif": .system(.body, design: .serif)
+        case "georgia": .custom("Georgia", size: 17, relativeTo: .body)
+        case "palatino": .custom("Palatino", size: 17, relativeTo: .body)
+        case "times": .custom("Times New Roman", size: 17, relativeTo: .body)
+        case "helvetica": .custom("Helvetica Neue", size: 17, relativeTo: .body)
+        case "avenir": .custom("Avenir Next", size: 17, relativeTo: .body)
+        case "menlo": .system(.body, design: .monospaced)
+        default: .body
+        }
+    }
+
     var body: some View {
-        Section("Font") {
+        Section("Reading fonts") {
             ForEach(fontOptions) { option in
                 Button {
                     fontID = option.id
                 } label: {
                     HStack {
-                        Text(option.name).foregroundStyle(.primary)
+                        Text(option.name)
+                            .font(Self.previewFont(for: option))
+                            .foregroundStyle(.primary)
                         if option.isCustom {
                             Image(systemName: "person.crop.circle")
-                                .font(.caption).foregroundStyle(.secondaryInk)
+                                .font(.caption)
+                                .foregroundStyle(.secondaryInk)
+                                .accessibilityHidden(true)
                         }
                         Spacer()
                         if option.id == fontID {
-                            Image(systemName: "checkmark").foregroundStyle(.tint)
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.tint)
+                                .accessibilityHidden(true)
                         }
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(option.name)
+                .accessibilityAddTraits(option.id == fontID ? .isSelected : [])
             }
             .onDelete(perform: deleteCustomFonts)
 
-            Button(action: onAddFont) {
-                Label("Add Font…", systemImage: "plus")
-            }
+            Button("Add Font…", action: onAddFont)
+                .foregroundStyle(.accentInk)
         }
     }
 
