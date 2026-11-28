@@ -33,6 +33,7 @@ extension PersistenceGateSuites {
                     "queues": fixture.queueCount
                 ])
 
+                try await Self.waitForIdlePersistenceGate()
                 try measureEmptySweep(fixture, report)
                 try measureAssets(fixture, report)
                 try withLocalTombstoneSigning {
@@ -40,11 +41,22 @@ extension PersistenceGateSuites {
                 }
                 try await measureImport(fixture, report)
                 try await measureRemoteSave(fixture, report)
+                try await Self.waitForIdlePersistenceGate()
                 try withLocalTombstoneSigning {
                     try measurePermanentDelete(fixture, report)
                     try measureDueSweep(fixture, report)
                 }
             }
+        }
+
+        /// The test host app can hold the process-wide gate while it prepares its own store at launch; the sweep
+        /// returns 0 while any operation holds it, so wait (bounded) rather than measure a skipped sweep.
+        private static func waitForIdlePersistenceGate() async throws {
+            let deadline = ContinuousClock.now + .seconds(120)
+            while PersistenceOperationGate.active != nil, ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(200))
+            }
+            try #require(PersistenceOperationGate.active == nil, "gate held by \(String(describing: PersistenceOperationGate.active))")
         }
 
         private func measureEmptySweep(
