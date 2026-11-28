@@ -24,9 +24,10 @@ struct QueueSortNewButton: View {
         Button(action: action) {
             Text("Sort")
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(ThemeManager.label(on: accentFill))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
+                .frame(minHeight: 36)
                 .background(accentFill, in: Capsule())
         }
         .buttonStyle(.plain)
@@ -432,7 +433,11 @@ extension QueueSortNewView {
             VStack(spacing: 6) {
                 Image(systemName: Self.symbol(for: action))
                     .font(.system(size: diameter * 0.36, weight: .semibold))
-                    .foregroundStyle(action == .keep ? AnyShapeStyle(.white) : glyphStyle(for: action))
+                    .foregroundStyle(
+                        action == .keep
+                            ? AnyShapeStyle(ThemeManager.label(on: accentFill))
+                            : glyphStyle(for: action)
+                    )
                     .frame(width: diameter, height: diameter)
                     .background {
                         Circle().fill(action == .keep ? AnyShapeStyle(accentFill) : AnyShapeStyle(theme.cardSurface))
@@ -464,7 +469,11 @@ extension QueueSortNewView {
                 } label: {
                     Label(Self.title(for: action), systemImage: Self.symbol(for: action))
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(action == .keep ? AnyShapeStyle(.white) : glyphStyle(for: action))
+                        .foregroundStyle(
+                            action == .keep
+                                ? AnyShapeStyle(ThemeManager.label(on: accentFill))
+                                : glyphStyle(for: action)
+                        )
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                         .background(
@@ -482,7 +491,7 @@ extension QueueSortNewView {
 
     /// Drop's cross is the destructive red, as on the board; Later's clock is ink.
     private func glyphStyle(for action: QueueSortAction) -> AnyShapeStyle {
-        action == .drop ? AnyShapeStyle(Color.red) : AnyShapeStyle(.primary)
+        action == .drop ? AnyShapeStyle(theme.errorColor) : AnyShapeStyle(.primary)
     }
 
     private var finishedView: some View {

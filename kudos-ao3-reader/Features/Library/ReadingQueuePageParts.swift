@@ -212,6 +212,183 @@ enum ReadingQueueFacts {
         }
         return parts.joined(separator: " · ")
     }
+
+    /// Preview subtitle on the New Queue sheet (`Queues.dc.html`):
+    /// `"2 works · about 3 h 50 min"`, omitting the offline tally before creation.
+    static func previewSubtitle(for works: [SavedWork]) -> String {
+        guard !works.isEmpty else { return "No works yet" }
+        let totalWordCount = works.allSatisfy { $0.wordCount > 0 }
+            ? works.reduce(0) { $0 + $1.wordCount }
+            : 0
+        var parts = ["\(works.count) work\(works.count == 1 ? "" : "s")"]
+        if let estimate = readingTimeEstimate(wordCount: totalWordCount) {
+            parts.append(estimate)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Context-card kicker on Edit Queue and Sources sheets (`Queue-Edit`, `Queue-Sources`):
+    /// `"Queue · 8 works"`.
+    static func contextCardKicker(workCount: Int) -> String {
+        "Queue · \(workCount) work\(workCount == 1 ? "" : "s")"
+    }
+
+    /// Context-card meta line on Edit Queue and Sources sheets (`Queue-Edit`, `Queue-Sources`):
+    /// `"About 9 h 40 min · 2 finished · 6 offline"`.
+    static func contextCardMeta(
+        workCount: Int,
+        totalWordCount: Int,
+        finishedCount: Int,
+        offlineCount: Int
+    ) -> String {
+        contextCardMeta(
+            workCount: workCount,
+            timeEstimate: readingTimeEstimate(wordCount: totalWordCount),
+            finishedCount: finishedCount,
+            offlineCount: offlineCount
+        )
+    }
+
+    /// Live context-card meta line matching the queue header's remaining-time rule.
+    static func contextCardMeta(for works: [SavedWork], offlineCount: Int) -> String {
+        let timeEstimate = remainingMinutes(for: works).flatMap { readingTimeEstimate(minutes: $0) }
+        let finishedCount = works.count { $0.readingState == .finished }
+        return contextCardMeta(
+            workCount: works.count,
+            timeEstimate: timeEstimate,
+            finishedCount: finishedCount,
+            offlineCount: offlineCount
+        )
+    }
+
+    private static func contextCardMeta(
+        workCount: Int,
+        timeEstimate: String?,
+        finishedCount: Int,
+        offlineCount: Int
+    ) -> String {
+        guard workCount > 0 else { return "No works yet" }
+        var parts: [String] = []
+        if let timeEstimate {
+            parts.append(timeEstimate)
+        }
+        if finishedCount > 0 {
+            parts.append("\(finishedCount) finished")
+        }
+        let offline = min(max(offlineCount, 0), workCount)
+        if offline == workCount {
+            parts.append("all offline")
+        } else if offline > 0 {
+            parts.append("\(offline) offline")
+        }
+        if parts.isEmpty {
+            parts.append("0 offline")
+        }
+        return capitalizedSentenceStart(parts.joined(separator: " · "))
+    }
+
+    /// Subtitle on the single-queue Find More bar (`Queue.dc.html`, `Queue-Sections.dc.html`):
+    /// `"Holmes casefic under 20k"` or `"Holmes casefic under 20k + 4 more"`.
+    static func findMoreSubtitle(sourceNames: [String]) -> String {
+        guard let first = sourceNames.first else { return "" }
+        guard sourceNames.count > 1 else { return first }
+        return "\(first) + \(sourceNames.count - 1) more"
+    }
+
+    static func findMoreSubtitle(sources: [QueueSavedSearchLink]) -> String {
+        findMoreSubtitle(sourceNames: sources.map(\.effectiveDisplayName))
+    }
+
+    /// Combined new-works pill on the single-queue Find More bar (`"3 new"`, `"9 new"`, `"20+ new"`).
+    static func findMoreBadge(counts: [Int]) -> String? {
+        let positive = counts.filter { $0 > 0 }
+        guard !positive.isEmpty else { return nil }
+        if positive.count == 1 {
+            return QueueSourceChecks.badge(positive[0])
+        }
+        let total = positive.reduce(0, +)
+        return positive.contains(where: { $0 >= 20 }) ? "\(total)+ new" : "\(total) new"
+    }
+
+    /// Spoken label for the queue page's Find More bar (`Queue.dc.html`, `Queue-Sections.dc.html`).
+    static func findMoreAccessibilityLabel(sourceNames: [String], newCounts: [Int]) -> String {
+        let target: String = if sourceNames.count == 1, let first = sourceNames.first {
+            first
+        } else {
+            "\(sourceNames.count) source\(sourceNames.count == 1 ? "" : "s")"
+        }
+        if let badge = findMoreBadge(counts: newCounts) {
+            return "Find more works: \(target), \(badge) on AO3"
+        }
+        return "Find more works: \(target) on AO3"
+    }
+
+    /// Title of the New-section triage banner (`Queue-Sections.dc.html`).
+    static let newBannerTitle = "New, not sorted yet"
+
+    /// Subtitle of the New-section triage banner (`Queue-Sections.dc.html`).
+    static func newBannerSubtitle(count: Int, allAddedToday: Bool, fromFindMore: Bool) -> String {
+        if allAddedToday && fromFindMore {
+            return "Added today from Find More"
+        }
+        if allAddedToday {
+            return "Added today"
+        }
+        if fromFindMore {
+            return "Added from Find More"
+        }
+        return count == 1 ? "1 work waiting to sort" : "\(count) works waiting to sort"
+    }
+
+    static func newBannerSubtitle(
+        for entries: [ReadingQueueSectionEntry],
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> String {
+        let allAddedToday = !entries.isEmpty && entries.allSatisfy {
+            calendar.isDate($0.membership.queuedAt, inSameDayAs: now)
+        }
+        // Every work, not any one of them: a mixed batch must not claim Find More.
+        let fromFindMore = !entries.isEmpty && entries.allSatisfy {
+            let kind = $0.membership.originKind
+            return kind == .search || kind == .source
+        }
+        return newBannerSubtitle(
+            count: entries.count,
+            allAddedToday: allAddedToday,
+            fromFindMore: fromFindMore
+        )
+    }
+
+    /// Series source row subtitle (`Queue-Sources.dc.html`):
+    /// `"Series · 2 parts, not finished"` or `"Series · 2 parts"`.
+    static func seriesSourceSubtitle(partCount: Int, isComplete: Bool) -> String {
+        guard partCount > 0 else { return "Series" }
+        let unit = partCount == 1 ? "part" : "parts"
+        return isComplete ? "Series · \(partCount) \(unit)" : "Series · \(partCount) \(unit), not finished"
+    }
+
+    /// Finished disclosure row count (`Queue-Sections.dc.html`): `"1 work"` / `"2 works"`.
+    static func finishedSectionCount(_ count: Int) -> String {
+        count == 1 ? "1 work" : "\(count) works"
+    }
+
+    /// Offline toggle subtitle on Edit Queue (`Queue-Edit.dc.html`):
+    /// `"6 of 8 downloaded · 41 MB"`.
+    static func offlineDownloadSubtitle(
+        offlineCount: Int,
+        totalCount: Int,
+        byteCount: Int64
+    ) -> String? {
+        guard totalCount > 0 else { return nil }
+        let clamped = min(max(offlineCount, 0), totalCount)
+        return "\(clamped) of \(totalCount) downloaded · \(queueByteCountString(byteCount))"
+    }
+
+    static func capitalizedSentenceStart(_ text: String) -> String {
+        guard let first = text.first else { return text }
+        return first.uppercased() + text.dropFirst()
+    }
 }
 
 /// 1h's quick filters: All · Unread · Offline · WIP, each with its count. Shaped
@@ -311,7 +488,7 @@ struct QueuePageHeader<FilterRail: View>: View {
     @ViewBuilder var filterRail: () -> FilterRail
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 20
+    @Environment(ThemeManager.self) private var themeManager
     @Environment(PrivacyGate.self) private var gate
     @AppStorage("hideMatureContent") private var hideMature = true
 
@@ -325,12 +502,8 @@ struct QueuePageHeader<FilterRail: View>: View {
             offlineCount: preservedIDs.count
         )
 
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
             headerTop(detailLine: detailLine)
-
-            if queue.kind != .smart, !queue.allVisibleSources.isEmpty {
-                fromSourcesBlock
-            }
 
             if !works.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
@@ -346,111 +519,96 @@ struct QueuePageHeader<FilterRail: View>: View {
                 }
             }
 
+            if queue.kind != .smart, !queue.allVisibleSources.isEmpty {
+                findMoreBar(sources: queue.allVisibleSources)
+            }
+
             filterRail()
         }
     }
 
-    @ViewBuilder
-    private var fromSourcesBlock: some View {
-        let sources = queue.allVisibleSources
-        VStack(alignment: .leading, spacing: 8) {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 4) {
-                    fromSourcesHeading(count: sources.count)
-                    manageSourcesButton
-                }
-            } else {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    fromSourcesHeading(count: sources.count)
-                    Spacer(minLength: 8)
-                    manageSourcesButton
-                }
-            }
-
-            ForEach(sources) { link in
-                if let kind = link.knownSourceKind {
-                    sourceCard(link: link, kind: kind)
-                }
-            }
-        }
-    }
-
-    private func fromSourcesHeading(count: Int) -> some View {
-        Text("From sources")
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(.secondaryInk)
-            .accessibilityAddTraits(.isHeader)
-            .accessibilityLabel("From sources, \(count)")
-    }
-
-    private var manageSourcesButton: some View {
-        Button("Sources", action: onManageSources)
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(.accentInk)
-            .buttonStyle(.plain)
-            .minimumHitTarget()
-            .accessibilityLabel("Manage sources for \(queue.displayName)")
-    }
-
-    private func sourceCard(link: QueueSavedSearchLink, kind: QueueSourceKind) -> some View {
-        let name = link.effectiveDisplayName
-        let subtitle = link.effectiveSubtitle
-        let count = link.displayedNewCount
+    private func findMoreBar(sources: [QueueSavedSearchLink]) -> some View {
+        let subtitle = ReadingQueueFacts.findMoreSubtitle(sources: sources)
+        let newCounts = sources.compactMap(\.displayedNewCount)
+        let badge = ReadingQueueFacts.findMoreBadge(counts: newCounts)
+        let spoken = ReadingQueueFacts.findMoreAccessibilityLabel(
+            sourceNames: sources.map(\.effectiveDisplayName),
+            newCounts: newCounts
+        )
+        let soleSource = sources.count == 1 ? sources.first : nil
         let layout = dynamicTypeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 10))
-        return Button { onOpenSource(link) } label: {
-            HStack(spacing: 10) {
-                Image(systemName: kind.symbolName)
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 8))
+
+        return Button {
+            if let soleSource {
+                onOpenSource(soleSource)
+            } else {
+                onManageSources()
+            }
+        } label: {
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(.secondaryInk)
-                    .frame(width: iconWidth)
                     .accessibilityHidden(true)
+
                 layout {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(name)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Find More")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
-                        if let subtitle, !subtitle.isEmpty {
+                        if !subtitle.isEmpty {
                             Text(subtitle)
                                 .font(.caption)
                                 .foregroundStyle(.secondaryInk)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 4) }
-                    if let count {
-                        Text(QueueSourceChecks.badge(count))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.accentInk)
+                    if let badge {
+                        QueueNewCountBadge(text: badge)
                     }
                 }
-                // Stacked at AX sizes there is no Spacer: keep the card full width (third review).
                 .frame(maxWidth: .infinity, alignment: .leading)
+
                 Image(systemName: "chevron.right")
-                    .font(.caption)
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondaryInk)
                     .accessibilityHidden(true)
             }
-            .padding(12)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+            .padding(.leading, 12)
+            .padding(.trailing, 10)
+            .padding(.vertical, 8)
+            .frame(minHeight: 48)
+            .background(
+                themeManager.appTheme.glassFill(0.10),
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(QueueSourceChecks.sourceAccessibilityLabel(
-            name: name,
-            kind: kind,
-            count: link.newResultCount,
-            filters: link.search?.filters
-        ))
-        .accessibilityAction(named: "Remove source") {
-            onRemoveSource(link)
+        .accessibilityLabel(spoken)
+        .accessibilityAction(named: "Manage sources") {
+            onManageSources()
         }
+        .modifier(QueueSingleSourceRemoveAction(source: soleSource, onRemove: onRemoveSource))
         .contextMenu {
-            Button { onOpenSource(link) } label: {
-                Label("Open on AO3", systemImage: kind.symbolName)
+            if let soleSource, let kind = soleSource.knownSourceKind {
+                Button { onOpenSource(soleSource) } label: {
+                    Label("Open on AO3", systemImage: kind.symbolName)
+                }
             }
-            Button(role: .destructive) { onRemoveSource(link) } label: {
-                Label("Remove Source", systemImage: "trash")
+            Button(action: onManageSources) {
+                Label("Manage Sources", systemImage: "square.stack.3d.up")
+            }
+            if let soleSource {
+                Divider()
+                Button(role: .destructive) { onRemoveSource(soleSource) } label: {
+                    Label("Remove Source", systemImage: "trash")
+                }
             }
         }
     }
@@ -642,5 +800,159 @@ struct WorkLedgerCardBackground: View {
     var body: some View {
         let _ = work.id
         return Color.clear.accessibilityHidden(true)
+    }
+}
+
+/// Filled accent pill for new-result counts on the Find More bar and Sources sheet
+/// (`Queue.dc.html`, `Queue-Sections.dc.html`, `Queue-Sources.dc.html`).
+struct QueueNewCountBadge: View {
+    let text: String
+
+    @Environment(\.accentFill) private var accentFill
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(ThemeManager.label(on: accentFill))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(accentFill, in: Capsule())
+    }
+}
+
+/// Rounded square icon tile matching `FormScreen` rows on `Queue-Edit` and `Queue-Sources`.
+struct QueueSourceIconTile: View {
+    let symbolName: String
+    var fill: Color = .gray
+
+    var body: some View {
+        Image(systemName: symbolName)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.white)
+            .frame(width: 28, height: 28)
+            .background(fill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}
+
+/// Shared `FormScreen` context card for Edit Queue (`Queue-Edit.dc.html`) and
+/// Sources (`Queue-Sources.dc.html`): cover stack, queue-coloured `"Queue · N works"`
+/// kicker, title, and `"About … · N finished · N offline"` meta line.
+struct QueueContextCard: View {
+    let name: String
+    let identity: UUID
+    let hue: Double?
+    let pickedHex: String?
+    let works: [SavedWork]
+    let offlineCount: Int
+    var isUserQueue = true
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(ThemeManager.self) private var themeManager
+    @Environment(PrivacyGate.self) private var gate
+    @AppStorage("hideMatureContent") private var hideMature = true
+
+    init(
+        name: String,
+        identity: UUID,
+        hue: Double?,
+        pickedHex: String?,
+        works: [SavedWork],
+        offlineCount: Int,
+        isUserQueue: Bool = true
+    ) {
+        self.name = name
+        self.identity = identity
+        self.hue = hue
+        self.pickedHex = pickedHex
+        self.works = works
+        self.offlineCount = offlineCount
+        self.isUserQueue = isUserQueue
+    }
+
+    init(queue: ReadingQueue, works: [SavedWork], offlineCount: Int) {
+        self.init(
+            name: queue.displayName,
+            identity: queue.id,
+            hue: queue.hue,
+            pickedHex: queue.colorHex,
+            works: works,
+            offlineCount: offlineCount,
+            isUserQueue: queue.isUserQueue
+        )
+    }
+
+    private var palette: SubjectPalette {
+        guard isUserQueue else { return themeManager.scopePalette }
+        let resolvedHue = hue ?? CoverArt.hue(for: name)
+        return themeManager.appTheme.subjectPalette(hue: resolvedHue, pickedHex: pickedHex)
+    }
+
+    var body: some View {
+        let visibleBacks = Array(
+            works.filter { !gate.isConcealed($0, enabled: hideMature) }
+                .prefix(CoverStackLayout.maxBacks)
+        )
+        let kicker = ReadingQueueFacts.contextCardKicker(workCount: works.count)
+        let meta = ReadingQueueFacts.contextCardMeta(for: works, offlineCount: offlineCount)
+        let cover = StackedWorkCover(
+            kind: .queue,
+            name: name,
+            identity: identity,
+            hue: hue,
+            pickedHex: pickedHex,
+            backs: visibleBacks,
+            size: CGSize(width: 56, height: 56)
+        )
+        .accessibilityHidden(true)
+
+        let info = VStack(alignment: .leading, spacing: 2) {
+            Text(kicker)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(palette.accent)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(name)
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(meta)
+                .font(.caption)
+                .foregroundStyle(.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
+                    cover
+                    info
+                }
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    cover
+                    info
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(name), \(kicker), \(meta)")
+    }
+}
+
+private struct QueueSingleSourceRemoveAction: ViewModifier {
+    let source: QueueSavedSearchLink?
+    let onRemove: (QueueSavedSearchLink) -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let source {
+            content.accessibilityAction(named: "Remove source") {
+                onRemove(source)
+            }
+        } else {
+            content
+        }
     }
 }

@@ -118,10 +118,7 @@ struct QueueSourcesSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
-    @Environment(PrivacyGate.self) private var gate
-    @AppStorage("hideMatureContent") private var hideMature = true
     @Query private var savedSeries: [SavedSeries]
-    @ScaledMetric(relativeTo: .body) private var iconWidth: CGFloat = 22
     @State private var showingAddSource = false
 
     private var savedSeriesByID: [Int: SavedSeries] {
@@ -182,13 +179,9 @@ struct QueueSourcesSheet: View {
                     Button {
                         showingAddSource = true
                     } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(.accentInk)
-                                .accessibilityHidden(true)
-                            Text("Add a Source…")
-                                .foregroundStyle(.accentInk)
-                        }
+                        Text("Add a Source…")
+                            .foregroundStyle(.accentInk)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .accessibilityLabel("Add a source to \(queue.displayName)")
                     .appThemedRows()
@@ -240,61 +233,17 @@ struct QueueSourcesSheet: View {
     }
 
     private var queueContextCard: some View {
-        let visibleBacks = Array(
-            works.filter { !gate.isConcealed($0, enabled: hideMature) }
-                .prefix(CoverStackLayout.maxBacks)
-        )
-        let detail = ReadingQueueFacts.headerDetail(for: works, offlineCount: preservedCount)
-        let cover = StackedWorkCover(
-            kind: .queue,
-            name: queue.displayName,
-            identity: queue.id,
-            hue: queue.hue,
-            pickedHex: queue.colorHex,
-            backs: visibleBacks,
-            size: CGSize(width: 52, height: 68)
-        )
-        .accessibilityHidden(true)
-
-        let info = VStack(alignment: .leading, spacing: 3) {
-            Text("Queue")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondaryInk)
-            Text(queue.displayName)
-                .font(.headline)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(detail)
-                .font(.caption)
-                .foregroundStyle(.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-
-        return Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 10) {
-                    cover
-                    info
-                }
-            } else {
-                HStack(alignment: .center, spacing: 12) {
-                    cover
-                    info
-                    Spacer(minLength: 0)
-                }
-            }
-        }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(queue.displayName), Queue, \(detail)")
+        QueueContextCard(queue: queue, works: works, offlineCount: preservedCount)
     }
 
     private func sourceSubtitle(for link: QueueSavedSearchLink, kind: QueueSourceKind) -> String? {
         if kind == .series, let id = link.ao3SeriesID, let cached = savedSeriesByID[id] {
             let count = cached.snapshot.effectivePartCount
             if count > 0 {
-                let unit = count == 1 ? "work" : "works"
-                return "Series · \(count) \(unit)"
+                return ReadingQueueFacts.seriesSourceSubtitle(
+                    partCount: count,
+                    isComplete: cached.snapshot.isComplete
+                )
             }
         }
         return link.effectiveSubtitle
@@ -312,11 +261,8 @@ struct QueueSourcesSheet: View {
             dismiss()
             onOpenSource(link)
         } label: {
-            HStack(alignment: .center, spacing: 10) {
-                Image(systemName: kind.symbolName)
-                    .foregroundStyle(.secondaryInk)
-                    .frame(width: iconWidth)
-                    .accessibilityHidden(true)
+            HStack(alignment: .center, spacing: 12) {
+                QueueSourceIconTile(symbolName: kind.symbolName)
                 layout {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(name)
@@ -332,9 +278,7 @@ struct QueueSourcesSheet: View {
                     }
                     if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 8) }
                     if let count {
-                        Text(QueueSourceChecks.badge(count))
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.accentInk)
+                        QueueNewCountBadge(text: QueueSourceChecks.badge(count))
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

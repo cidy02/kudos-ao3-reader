@@ -113,7 +113,7 @@ struct QueueTagSheet: View {
     private func footnote(_ text: String) -> some View {
         Text(text)
             .font(.system(size: footnoteSize))
-            .foregroundStyle(.secondary.opacity(0.7))
+            .foregroundStyle(.secondaryInk)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 14)
