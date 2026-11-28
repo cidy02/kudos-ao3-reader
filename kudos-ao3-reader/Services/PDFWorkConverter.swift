@@ -399,12 +399,15 @@ nonisolated enum PDFWorkConverter {
         (action as? PDFActionGoTo)?.destination.page
     }
 
+    /// Stands in for a scene break so the plain-text converter does not treat `* * *` as a chapter heading.
+    /// Only a paragraph that is this character is restored: the character can occur in real PDF text, and replacing
+    /// every occurrence would turn that text into `* * *` here while the outline path left it alone.
+    /// `HTMLWorkSanitizer.paragraphs` keeps it (it escapes `& < > " '` only), so the paragraph still matches.
+    private static let sceneBreakPlaceholder = "\u{E000}"
+
     /// No outline: flatten the whole document and reuse the plain-text converter's
     /// chapter heuristics, so PDFs and `.txt` files split on the same rules and
     /// there is only one place where "what looks like a chapter heading" is decided.
-    /// A private-use character no PDF text can contain, standing in for a scene break on the plain-text path.
-    private static let sceneBreakPlaceholder = "\u{E000}"
-
     private static func textHeuristicChapters(
         pageLines: [[String]],
         fallbackTitle: String
@@ -424,8 +427,10 @@ nonisolated enum PDFWorkConverter {
             text: text,
             fallbackTitle: fallbackTitle
         ) else { return [] }
+        let marker = "<p>\(sceneBreakPlaceholder)</p>"
+        let restored = "<p>\(separator)</p>"
         return result.chapters.map {
-            .init(title: $0.title, bodyXHTML: $0.bodyXHTML.replacingOccurrences(of: sceneBreakPlaceholder, with: separator))
+            .init(title: $0.title, bodyXHTML: $0.bodyXHTML.replacingOccurrences(of: marker, with: restored))
         }
     }
 

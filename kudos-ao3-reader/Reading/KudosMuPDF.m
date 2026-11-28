@@ -30,15 +30,60 @@ static void KudosAppendLine(fz_stext_line *line, NSMutableString *buffer) {
 /// What a drawn scene break becomes in the extracted text (the same string the converter uses for typed ones).
 static NSString *const KudosSceneBreakMarker = @"* * *";
 
-/// The vertical centres, top to bottom, of horizontal rules that separate paragraphs: a vector at most 4 pt tall and at
-/// least 40% of the page wide that crosses no line of text (so underlines and strike-throughs don't count; a rule
-/// between two lines of one block still counts, because MuPDF can group paragraphs on either side of it). Rules
-/// within 6 pt of each other are one rule (calibre strokes an `<hr>` as two overlapping paths).
-/// shortcut: placed by height on the page, so a two-column layout could put a break in the wrong column; fan fiction
-/// PDFs are single-column, revisit if a multi-column import shows it.
+typedef struct {
+    float y;
+    float x0;
+    float x1;
+} KudosRule;
+
+static int KudosCompareRules(const void *va, const void *vb) {
+    float ay = ((const KudosRule *)va)->y;
+    float by = ((const KudosRule *)vb)->y;
+    if (ay < by) return -1;
+    if (ay > by) return 1;
+    return 0;
+}
+
+/// A vertical border of a table or a box around a quote. Its own bbox is tall, so the horizontal sides are what
+/// would otherwise pass the scene-break test; this catches those sides.
+static BOOL KudosVerticalStrokeCrosses(fz_rect rule, fz_stext_block *self, fz_stext_page *page) {
+    float midY = (rule.y0 + rule.y1) / 2;
+    for (fz_stext_block *other = page->first_block; other != NULL; other = other->next) {
+        if (other == self || other->type != FZ_STEXT_BLOCK_VECTOR) {
+            continue;
+        }
+        if ((other->u.v.flags & FZ_STEXT_VECTOR_IS_RECTANGLE) == 0) {
+            continue;
+        }
+        fz_rect box = other->bbox;
+        if (box.x1 - box.x0 > 4 || box.y1 - box.y0 <= 4) {
+            continue;
+        }
+        float midX = (box.x0 + box.x1) / 2;
+        if (midX < rule.x0 || midX > rule.x1) {
+            continue;
+        }
+        if (box.y0 <= midY && midY <= box.y1) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+/// The vertical centres, top to bottom, of horizontal rules that separate paragraphs. A vector at most 4 pt tall and
+/// at least 40% of the page wide, in the page and not in its outer 12 pt (a rule along the page edge). A vertical
+/// stroke crossing it is a table or a box, not a break. Crossing a text line means sharing that line's x range as
+/// well as its height, so a strike-through counts and a rule beside a margin note, or beside the other column, does
+/// not. A rule between two lines of one block still counts. Rules within 6 pt of each other and overlapping in x are
+/// one rule (calibre strokes an `<hr>` as two overlapping paths).
+/// shortcut: a break is inserted by page height, so two columns can put it in the wrong column; fan fiction PDFs are
+/// single-column, revisit if a multi-column import shows it.
 static NSArray<NSNumber *> *KudosSceneBreakRules(fz_stext_page *page) {
     float pageWidth = page->mediabox.x1 - page->mediabox.x0;
-    NSMutableArray<NSNumber *> *centres = [NSMutableArray array];
+    if (pageWidth < 1) {
+        return @[];
+    }
+    NSMutableData *found = [NSMutableData data];
     for (fz_stext_block *block = page->first_block; block != NULL; block = block->next) {
         if (block->type != FZ_STEXT_BLOCK_VECTOR) {
             continue;
@@ -48,30 +93,61 @@ static NSArray<NSNumber *> *KudosSceneBreakRules(fz_stext_page *page) {
             continue;
         }
         float centre = (box.y0 + box.y1) / 2;
-        BOOL overlapsText = NO;
-        for (fz_stext_block *text = page->first_block; text != NULL && !overlapsText; text = text->next) {
+        // `mediabox` is the crop box in the same space as the vectors (origin at the top left, y downward),
+        // including a rotated or offset page. A rule outside that box, or in the outer 12 pt, is a page edge.
+        if (centre - page->mediabox.y0 < 12 || page->mediabox.y1 - centre < 12) {
+            continue;
+        }
+        if (KudosVerticalStrokeCrosses(box, block, page)) {
+            continue;
+        }
+        BOOL crossesText = NO;
+        for (fz_stext_block *text = page->first_block; text != NULL && !crossesText; text = text->next) {
             if (text->type != FZ_STEXT_BLOCK_TEXT) {
                 continue;
             }
             for (fz_stext_line *line = text->u.t.first_line; line != NULL; line = line->next) {
-                if (centre >= line->bbox.y0 && centre <= line->bbox.y1) {
-                    overlapsText = YES;
+                if (centre < line->bbox.y0 || centre > line->bbox.y1) {
+                    continue;
+                }
+                if (box.x0 <= line->bbox.x1 && box.x1 >= line->bbox.x0) {
+                    crossesText = YES;
                     break;
                 }
             }
         }
-        if (!overlapsText) {
-            [centres addObject:@(centre)];
+        if (crossesText) {
+            continue;
+        }
+        KudosRule rule = { centre, box.x0, box.x1 };
+        [found appendBytes:&rule length:sizeof(rule)];
+    }
+    NSUInteger count = found.length / sizeof(KudosRule);
+    KudosRule *rules = found.mutableBytes;
+    if (count > 1) {
+        qsort(rules, count, sizeof(KudosRule), KudosCompareRules);
+    }
+    // Drop a second stroke of a rule already kept. The window is the kept rule, not the previous raw one, so a
+    // stroke in the other column between the two passes of one `<hr>` does not hide the second pass.
+    NSUInteger kept = 0;
+    for (NSUInteger index = 0; index < count; index++) {
+        KudosRule rule = rules[index];
+        BOOL sameStroke = NO;
+        for (NSUInteger prior = 0; prior < kept; prior++) {
+            if (rule.y - rules[prior].y <= 6 && rules[prior].x0 <= rule.x1 && rule.x0 <= rules[prior].x1) {
+                sameStroke = YES;
+                break;
+            }
+        }
+        if (!sameStroke) {
+            rules[kept++] = rule;
         }
     }
-    [centres sortUsingSelector:@selector(compare:)];
-    NSMutableArray<NSNumber *> *rules = [NSMutableArray array];
-    for (NSNumber *centre in centres) {
-        if (rules.count == 0 || centre.floatValue - rules.lastObject.floatValue > 6) {
-            [rules addObject:centre];
-        }
+    NSMutableArray<NSNumber *> *centres = [NSMutableArray arrayWithCapacity:kept];
+    for (NSUInteger index = 0; index < kept; index++) {
+        [centres addObject:@(rules[index].y)];
     }
-    return rules;
+    return centres;
 }
 
 + (nullable NSArray<NSArray<NSString *> *> *)extractFromPDFAtPath:(NSString *)path
