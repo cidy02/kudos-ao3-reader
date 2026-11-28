@@ -2386,8 +2386,12 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
     /// for a reset, whatever its stamp: unreadable is not the same as removed.
     var malformedNamed: Set<String> = []
 
+    /// The four privacy gates. Not assigned by recency (a restore may tighten them, never loosen them), but watched by
+    /// the clock like any setting, so a change made here is stamped and uploaded, and an older copy can't undo it
+    /// (owner, 2026-11-27: "i just turned off blur mature works, and when i opened the app again it was back on").
+    static let privacyGateKeys = ["confirmBeforeDelete", "hideMatureContent", "requireBiometricToReveal", "matureContentMode"]
     /// Settings a restore assigns by recency. The four privacy gates are not here: a restore
-    /// may tighten them and never loosen them, whatever its date. `readerFontID` is local.
+    /// may tighten them and never loosen them. `readerFontID` is local.
     static let recencyKeys = [
         "readerMode", "readerTwoPage", "readerCustomize", "readerBoldText", "readerFontPt",
         "readerLineHeight", "readerLetterSpacing", "readerWordSpacing", "readerMargin",
@@ -2507,7 +2511,8 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
             let key = SyncedSettingsClock.entry(from: id)?.key ?? id
             return extraKind(for: key) != nil ? key : nil
         }
-        let all = Set(recencyKeys + extraKeys.keys + patterned + stamped + incoming.filter { extraKind(for: $0) != nil })
+        let all = Set(recencyKeys + privacyGateKeys + extraKeys.keys + patterned + stamped
+            + incoming.filter { extraKind(for: $0) != nil })
         let maps = Set(all.filter { extraKind(for: $0) == .stringMap })
         return (all.sorted(), maps)
     }
@@ -2953,18 +2958,36 @@ nonisolated struct KudosBackupSettings: Codable, Equatable {
         // Consequence worth knowing: a relaxation cannot propagate between the user's own
         // devices either — once a gate is on anywhere it stays on until it is turned off on
         // each device. That is the intended direction of the trade.
-        defaults.set(defaults.bool(forKey: "confirmBeforeDelete") || confirmBeforeDelete, forKey: "confirmBeforeDelete")
-        defaults.set(defaults.bool(forKey: "hideMatureContent") || hideMatureContent, forKey: "hideMatureContent")
-        defaults.set(
-            defaults.bool(forKey: "requireBiometricToReveal") || requireBiometricToReveal,
-            forKey: "requireBiometricToReveal"
-        )
+        //
+        // And a gate turned off here stays off: tightening takes the clock's verdict like any
+        // setting, so a copy older than this device's own change (the folder's copy from before
+        // the reader switched it off, synced down at the next launch) can't switch it back on.
+        // A newer change made elsewhere still tightens; nothing here ever loosens.
+        func tighten(_ key: String, to incomingOn: Bool) {
+            let local = defaults.bool(forKey: key)
+            if incomingOn, !local {
+                let incoming = stamp(key)
+                guard wins(key, incoming) else { return }
+                defaults.set(true, forKey: key)
+                SyncedSettingsClock.adopt(key: key, stamp: incoming, in: defaults)
+            } else if defaults.object(forKey: key) == nil {
+                // Unchanged from before: a gate never set here takes the copy's value.
+                defaults.set(local || incomingOn, forKey: key)
+            }
+        }
+        tighten("confirmBeforeDelete", to: confirmBeforeDelete)
+        tighten("hideMatureContent", to: hideMatureContent)
+        tighten("requireBiometricToReveal", to: requireBiometricToReveal)
         // `.hide` is stricter than `.obscure`. An unrecognised incoming string keeps the local
         // value rather than being coerced — the same fail-closed shape as M2's tombstone types.
         if let incomingMode = MaturePrivacyMode(rawValue: matureContentMode) {
             let localMode = MaturePrivacyMode(rawValue: defaults.string(forKey: "matureContentMode") ?? "")
             let stricter = (localMode == .hide || incomingMode == .hide) ? MaturePrivacyMode.hide : incomingMode
-            defaults.set(stricter.rawValue, forKey: "matureContentMode")
+            let incoming = stamp("matureContentMode")
+            if stricter != localMode, localMode == nil || wins("matureContentMode", incoming) {
+                defaults.set(stricter.rawValue, forKey: "matureContentMode")
+                SyncedSettingsClock.adopt(key: "matureContentMode", stamp: incoming, in: defaults)
+            }
         }
         write(appTheme, "appTheme")
         write(readerTheme, "readerTheme")

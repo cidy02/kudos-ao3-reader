@@ -35,6 +35,75 @@ struct SyncedSettingsTests {
         #expect(defaults.double(forKey: "readerFontPt") == 22)
     }
 
+    // Privacy gates (owner, 2026-11-27: "i just turned off blur mature works, and when i opened the app again it was
+    // back on"): a sync may still tighten a gate and never loosen one, but not over a newer change made here.
+
+    @Test func aPrivacyGateTurnedOffHereStaysOffAfterAnOlderCopyFromTheFolder() {
+        let defaults = freshDefaults()
+        defaults.set(true, forKey: "hideMatureContent")
+        var stale = folderCopy(of: defaults, fontPt: 18)   // also records the baseline, as a sync-up does
+        stale.hideMatureContent = true
+        defaults.set(false, forKey: "hideMatureContent")    // the reader turns it off afterwards
+
+        stale.apply(to: defaults, fromSync: true)
+
+        #expect(defaults.bool(forKey: "hideMatureContent") == false)
+    }
+
+    @Test func aPrivacyGateNobodyChangedHereIsStillTightenedByTheFolder() {
+        let defaults = freshDefaults()
+        defaults.set(false, forKey: "hideMatureContent")
+        var other = folderCopy(of: defaults, fontPt: 18)
+        other.hideMatureContent = true
+
+        other.apply(to: defaults, fromSync: true)
+
+        #expect(defaults.bool(forKey: "hideMatureContent") == true)
+    }
+
+    @Test func aPrivacyGateIsNeverLoosenedByACopy() {
+        let defaults = freshDefaults()
+        defaults.set(true, forKey: "hideMatureContent")
+        var other = folderCopy(of: defaults, fontPt: 18)
+        other.hideMatureContent = false
+
+        other.apply(to: defaults, fromSync: true)
+        other.apply(to: defaults)
+
+        #expect(defaults.bool(forKey: "hideMatureContent") == true)
+    }
+
+    @Test func anExplicitRestoreStillTightensAGateChangedHere() {
+        let defaults = freshDefaults()
+        defaults.set(true, forKey: "hideMatureContent")
+        var backup = folderCopy(of: defaults, fontPt: 18)
+        backup.hideMatureContent = true
+        defaults.set(false, forKey: "hideMatureContent")
+
+        backup.apply(to: defaults)
+
+        #expect(defaults.bool(forKey: "hideMatureContent") == true)
+    }
+
+    @Test func blurChosenHereIsNotTurnedBackIntoHideByAnOlderCopy() {
+        let defaults = freshDefaults()
+        defaults.set(MaturePrivacyMode.hide.rawValue, forKey: "matureContentMode")
+        var stale = folderCopy(of: defaults, fontPt: 18)
+        stale.matureContentMode = MaturePrivacyMode.hide.rawValue
+        defaults.set(MaturePrivacyMode.obscure.rawValue, forKey: "matureContentMode")
+
+        stale.apply(to: defaults, fromSync: true)
+
+        #expect(defaults.string(forKey: "matureContentMode") == MaturePrivacyMode.obscure.rawValue)
+    }
+
+    @Test func privacyGatesAreWatchedSoAChangeIsStampedAndUploaded() {
+        let keys = KudosBackupSettings.observedKeys(in: freshDefaults()).keys
+        for key in KudosBackupSettings.privacyGateKeys {
+            #expect(keys.contains(key))
+        }
+    }
+
     @Test func aSettingNobodyChangedHereTakesTheFoldersValue() {
         let defaults = freshDefaults()
         defaults.set(18.0, forKey: "readerFontPt")
