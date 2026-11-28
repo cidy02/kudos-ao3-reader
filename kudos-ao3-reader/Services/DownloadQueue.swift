@@ -253,11 +253,13 @@ final class DownloadQueue {
     private func run() async {
         defer { isRunning = false }
         guard let context else { return }
+        let batch = WorkIdentityBatch(in: context)
+        defer { batch.stopTrackingChanges() }
 
         while let index = items.firstIndex(where: { $0.status == .queued }) {
             let item = items[index]
             let id = item.id
-            let existing = item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
+            let existing = item.sourceURL.flatMap { batch.existingWork(forSource: $0) }
             guard Self.shouldProcess(item, existing: existing) else {
                 items[index].status = .skipped
                 continue
@@ -281,7 +283,7 @@ final class DownloadQueue {
                 }
                 guard let current = self.index(of: id),
                       Self.shouldProcess(
-                          items[current], existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
+                          items[current], existing: item.sourceURL.flatMap { batch.existingWork(forSource: $0) }
                       ) else {
                     try? FileManager.default.removeItem(at: temp)
                     if let current = self.index(of: id) { items[current].status = .skipped }
@@ -296,9 +298,9 @@ final class DownloadQueue {
                         guard let liveIndex = self.index(of: id) else { return false }
                         return Self.shouldProcess(
                             self.items[liveIndex],
-                            existing: item.sourceURL.flatMap { existingWork(forSource: $0, in: context) }
+                            existing: item.sourceURL.flatMap { batch.existingWork(forSource: $0) }
                         )
-                    }, into: context
+                    }, using: batch, into: context
                 )
                 if saved.modelContext != nil, !saved.isPendingDeletion {
                     await verifyAvailability(saved, context)

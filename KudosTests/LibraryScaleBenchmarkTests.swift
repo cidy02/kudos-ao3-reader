@@ -186,9 +186,11 @@ extension PersistenceGateSuites {
             var files: [URL] = []
             defer { for file in files { try? fm.removeItem(at: file) } }
             let started = ContinuousClock.now
+            let batch = WorkIdentityBatch(in: context)
+            defer { batch.stopTrackingChanges() }
             for input in inputs {
                 let work = try await importEPUB(
-                    input.file, source: input.source, verifyAvailability: false, into: context
+                    input.file, source: input.source, verifyAvailability: false, using: batch, into: context
                 )
                 imported.append(work)
                 files.append(work.fileURL)

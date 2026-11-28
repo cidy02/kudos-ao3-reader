@@ -682,6 +682,17 @@ enum ReadingQueueService {
         origin: ReadingQueueMembershipOrigin? = nil,
         in context: ModelContext
     ) -> ReadingQueueMembership {
+        add(work, to: queue, state: state, origin: origin, sortOrder: nil, in: context)
+    }
+
+    static func add(
+        _ work: SavedWork,
+        to queue: ReadingQueue,
+        state: ReadingQueueMembershipState,
+        origin: ReadingQueueMembershipOrigin?,
+        sortOrder: Int?,
+        in context: ModelContext
+    ) -> ReadingQueueMembership {
         if queue.kind == .smart {
             return refusedSmartMembership(work, queue: queue, state: state, origin: origin, in: context)
         }
@@ -694,7 +705,7 @@ enum ReadingQueueService {
         let membership = ReadingQueueMembership(
             queue: queue,
             work: work,
-            sortOrderInQueue: nextMembershipSortOrder(in: queue),
+            sortOrderInQueue: sortOrder ?? nextMembershipSortOrder(in: queue),
             state: state,
             origin: origin
         )
@@ -839,9 +850,30 @@ enum ReadingQueueService {
         in context: ModelContext,
         downloadEPUB: ((Int) async throws -> URL)? = nil
     ) async throws -> SavedWork {
+        try await addToSavedForLater(
+            summary, state: state, origin: origin, importSource: importSource, in: context,
+            downloadEPUB: downloadEPUB, using: nil
+        )
+    }
+
+    static func addToSavedForLater(
+        _ summary: AO3WorkSummary,
+        state: ReadingQueueMembershipState,
+        origin: ReadingQueueMembershipOrigin?,
+        importSource: WorkImportSource? = nil,
+        in context: ModelContext,
+        downloadEPUB: ((Int) async throws -> URL)?,
+        using batch: RemoteSaveForLaterBatch?
+    ) async throws -> SavedWork {
         let saved: SavedWork
         let createdNewWork: Bool
-        if let existing = existingWork(for: summary, in: context) {
+        let match: SavedWork?
+        if let batch {
+            match = batch.identity.existingWork(ao3WorkID: summary.id, sourceURL: summary.workURL.absoluteString)
+        } else {
+            match = existingWork(for: summary, in: context)
+        }
+        if let existing = match {
             // Same revival rule as addAndPreserveSummary — never queue a record that
             // stays scheduled for permanent deletion.
             if existing.isPendingDeletion {
@@ -867,10 +899,15 @@ enum ReadingQueueService {
 
         saved.ao3WorkID = summary.id
         applyRemoteMetadata(summary, to: saved)
+        batch?.identity.record(saved)
         if createdNewWork { saved.isSaved = false }
-        let queue = ensureSavedForLaterQueue(in: context)
-        _ = add(saved, to: queue, state: state, origin: origin, in: context)
-        try context.save()
+        if let batch {
+            try batch.add(saved, state: state, origin: origin)
+        } else {
+            let queue = ensureSavedForLaterQueue(in: context)
+            _ = add(saved, to: queue, state: state, origin: origin, in: context)
+            try context.save()
+        }
         try await preserve(saved, in: context, downloadEPUB: downloadEPUB)
         return saved
     }
@@ -1268,7 +1305,23 @@ enum ReadingQueueService {
         origin: ReadingQueueMembershipOrigin? = nil,
         in context: ModelContext
     ) async throws -> SavedWork {
-        if let existing = existingWork(for: summary, in: context) {
+        try await resolveLocalWork(for: summary, importSource: importSource, origin: origin, using: nil, in: context)
+    }
+
+    static func resolveLocalWork(
+        for summary: AO3WorkSummary,
+        importSource: WorkImportSource?,
+        origin: ReadingQueueMembershipOrigin?,
+        using batch: WorkIdentityBatch?,
+        in context: ModelContext
+    ) async throws -> SavedWork {
+        let match: SavedWork?
+        if let batch {
+            match = batch.existingWork(ao3WorkID: summary.id, sourceURL: summary.workURL.absoluteString)
+        } else {
+            match = existingWork(for: summary, in: context)
+        }
+        if let existing = match {
             // Acting on a remote card whose local twin sits in Recently Deleted
             // revives it — otherwise the action would mutate a hidden record still
             // scheduled for permanent deletion.
@@ -1287,13 +1340,15 @@ enum ReadingQueueService {
             knownChapterCount: SavedWork.postedChapterCount(from: summary.chapters),
             importSource: importSource,
             statsAtSave: WorkStatsAtSave(summary: summary, origin: origin),
+            using: batch,
             into: context
         )
         applyRemoteMetadata(summary, to: saved)
         if saved.coverRecipeJSON == nil || GeneratedCoverRecipe.isAutomaticPin(in: saved.coverRecipeJSON) {
             saved.pinCover(salt: 0, automatic: saved.workFandoms.isEmpty || saved.wordCount == 0)
         }
-        try? context.save()
+        batch?.record(saved)
+        do { try context.save() } catch { batch?.invalidate() }
         return saved
     }
 
@@ -1390,7 +1445,7 @@ enum ReadingQueueService {
         return (queues.map(\.sortOrder).max() ?? 0) + 1
     }
 
-    private static func nextMembershipSortOrder(in queue: ReadingQueue) -> Int {
+    static func nextMembershipSortOrder(in queue: ReadingQueue) -> Int {
         (queue.memberships.map(\.sortOrderInQueue).max() ?? -1) + 1
     }
 

@@ -1,3 +1,5 @@
+import Foundation
+import os
 import SwiftData
 
 /// Shared bulk-action resolution for every remote-work selection surface (Browse's
@@ -26,6 +28,11 @@ func resolveSelectedRemoteWorks(
     origin: ReadingQueueMembershipOrigin? = nil,
     perform: ([SavedWork]) async -> Void
 ) async -> String? {
+    let importBatch: WorkIdentityBatch? = switch mode {
+    case .metadataOnly: nil
+    case .withEPUB: WorkIdentityBatch(in: context)
+    }
+    defer { importBatch?.stopTrackingChanges() }
     var resolved: [SavedWork] = []
     var failureCount = 0
     for summary in selected {
@@ -37,7 +44,8 @@ func resolveSelectedRemoteWorks(
                 ))
             case .withEPUB:
                 resolved.append(try await ReadingQueueService.resolveLocalWork(
-                    for: summary, importSource: WorkImportSource(origin: origin), origin: origin, in: context
+                    for: summary, importSource: WorkImportSource(origin: origin), origin: origin,
+                    using: importBatch, in: context
                 ))
             }
         } catch is CancellationError {
@@ -68,6 +76,8 @@ func bulkSaveForLaterRemote(
     in context: ModelContext,
     downloadEPUB: ((Int) async throws -> URL)? = nil
 ) async -> String? {
+    let batch = RemoteSaveForLaterBatch(in: context)
+    defer { batch.stopTrackingChanges() }
     var failureCount = 0
     for summary in selected {
         do {
@@ -76,11 +86,13 @@ func bulkSaveForLaterRemote(
                 state: .new,
                 origin: origin,
                 in: context,
-                downloadEPUB: downloadEPUB
+                downloadEPUB: downloadEPUB,
+                using: batch
             )
         } catch is CancellationError {
             return nil
         } catch {
+            batch.identity.invalidate()
             failureCount += 1
         }
     }
@@ -88,4 +100,79 @@ func bulkSaveForLaterRemote(
     return failureCount == selected.count
         ? "Couldn't add any of the selected works to Want to Read. Check your connection and try again."
         : "\(failureCount) of \(selected.count) selected works couldn't be added to Want to Read and were skipped."
+}
+
+/// Reuses the normalized queue and its append position between downloads.
+/// A queue edit interleaved at an await invalidates both before the next add.
+@MainActor
+final class RemoteSaveForLaterBatch {
+    let identity: WorkIdentityBatch
+    private let context: ModelContext
+    private var queue: ReadingQueue?
+    private var nextOrder = 0
+    private var adding = false
+    private var observers: [any NSObjectProtocol] = []
+    private let externalSave = OSAllocatedUnfairLock(initialState: false)
+
+    init(in context: ModelContext) {
+        self.context = context
+        identity = WorkIdentityBatch(in: context)
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(forName: ModelContext.willSave, object: context, queue: nil) {
+            [weak self] _ in
+            MainActor.assumeIsolated { self?.invalidateForQueueChanges() }
+        })
+        let contextID = ObjectIdentifier(context)
+        let invalidation = externalSave
+        let entities: Set<String> = [
+            Schema.entityName(for: ReadingQueue.self), Schema.entityName(for: ReadingQueueMembership.self)
+        ]
+        observers.append(center.addObserver(forName: ModelContext.didSave, object: nil, queue: nil) { notice in
+            guard let sender = notice.object, ObjectIdentifier(sender as AnyObject) != contextID else { return }
+            if WorkIdentityBatch.save(notice, affects: entities) {
+                invalidation.withLock { $0 = true }
+            }
+        })
+    }
+
+    func stopTrackingChanges() {
+        identity.stopTrackingChanges()
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+        observers.removeAll()
+    }
+
+    func add(_ work: SavedWork, state: ReadingQueueMembershipState, origin: ReadingQueueMembershipOrigin?) throws {
+        invalidateForQueueChanges()
+        let externallyChanged = externalSave.withLock { dirty in
+            let wasDirty = dirty
+            dirty = false
+            return wasDirty
+        }
+        adding = true
+        defer { adding = false }
+        let target: ReadingQueue
+        if let queue, !externallyChanged {
+            target = queue
+        } else {
+            target = ReadingQueueService.ensureSavedForLaterQueue(in: context)
+            queue = target
+            nextOrder = ReadingQueueService.nextMembershipSortOrder(in: target)
+        }
+        let membership = ReadingQueueService.add(
+            work, to: target, state: state, origin: origin, sortOrder: nextOrder, in: context
+        )
+        if membership.sortOrderInQueue == nextOrder { nextOrder += 1 }
+        do {
+            try context.save()
+        } catch {
+            queue = nil
+            throw error
+        }
+    }
+
+    private func invalidateForQueueChanges() {
+        guard !adding, queue != nil else { return }
+        let changed = context.insertedModelsArray + context.changedModelsArray + context.deletedModelsArray
+        if changed.contains(where: { $0 is ReadingQueue || $0 is ReadingQueueMembership }) { queue = nil }
+    }
 }
