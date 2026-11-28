@@ -27,7 +27,6 @@ private struct WorkDetailMyCopyCell: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let editAction = row.action {
                     Button(editAction.title, action: action)
-                        .font(.footnote)
                         .buttonStyle(.plain)
                         .foregroundStyle(.accentInk)
                         .layoutFreeHitTarget(action: action)

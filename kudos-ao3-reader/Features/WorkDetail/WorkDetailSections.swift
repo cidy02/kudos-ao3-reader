@@ -642,27 +642,17 @@ struct WorkDetailCommentsRow: View {
                 .accessibilityHidden(true)
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Comments")
-                        .font(.body)
-                        .foregroundStyle(.primary)
+                    commentsTitle
                     if let countLabel {
-                        Text(countLabel)
-                            .font(.body)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondaryInk)
+                        commentsCount(countLabel)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                Text("Comments")
-                    .font(.body)
-                    .foregroundStyle(.primary)
+                commentsTitle
                 Spacer(minLength: 0)
                 if let countLabel {
-                    Text(countLabel)
-                        .font(.body)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondaryInk)
+                    commentsCount(countLabel)
                 }
             }
             Image(systemName: "chevron.right")
@@ -674,5 +664,23 @@ struct WorkDetailCommentsRow: View {
         .padding(.vertical, 12)
         .frame(minHeight: 52)
         .contentShape(Rectangle())
+    }
+
+    /// The row is pushed by a background link that already speaks
+    /// `accessibilityLabel(count:)`. Leaving these texts in the tree makes
+    /// VoiceOver read the count twice.
+    private var commentsTitle: some View {
+        Text("Comments")
+            .font(.body)
+            .foregroundStyle(.primary)
+            .accessibilityHidden(true)
+    }
+
+    private func commentsCount(_ text: String) -> some View {
+        Text(text)
+            .font(.body)
+            .monospacedDigit()
+            .foregroundStyle(.secondaryInk)
+            .accessibilityHidden(true)
     }
 }

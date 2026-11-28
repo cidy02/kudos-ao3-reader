@@ -9,40 +9,37 @@ import Testing
 @MainActor
 @Suite("Work Detail board copy (T-507)")
 struct WorkDetailBoardCopyTests {
-    @Test func seriesWordsLabelFormatsSingularSmallAndCompactCounts() {
+    @Test func seriesWordsLabelFormatsSingularAndCompactCounts() {
         #expect(WorkDetailDisclosure.seriesWordsLabel(1) == "1 word")
-        #expect(WorkDetailDisclosure.seriesWordsLabel(850) == "850 words")
+        let small = 850.compactCount.lowercased()
+        #expect(WorkDetailDisclosure.seriesWordsLabel(850) == "\(small) words")
         let compact = 141_000.compactCount.lowercased()
         #expect(WorkDetailDisclosure.seriesWordsLabel(141_000) == "\(compact) words")
     }
 
-    @Test func seriesDigestIncludesWordsOnlyWhenKnown() {
-        let compact = 141_000.compactCount.lowercased()
+    /// T-511: the collapsed digest is the title and the part, never a length.
+    /// The board's words and completion stay on the expanded row.
+    @Test func seriesDigestStaysAPartLineWhileTheExpandedRowCarriesLength() {
         #expect(
             WorkDetailDisclosure.seriesDigest(
-                title: "The Coast Road", position: 2, partCount: 3, wordCount: 141_000
-            ) == "The Coast Road · part 2 of 3 · \(compact) words"
-        )
-        #expect(
-            WorkDetailDisclosure.seriesDigest(
-                title: "The Coast Road", position: 2, partCount: 3, wordCount: nil
+                title: "The Coast Road", position: 2, partCount: 3
             ) == "The Coast Road · part 2 of 3"
         )
         #expect(
             WorkDetailDisclosure.seriesDigest(
-                title: "The Coast Road", position: 2, partCount: nil, wordCount: 0
+                title: "The Coast Road", position: 2, partCount: nil
             ) == "The Coast Road · part 2"
         )
         #expect(
-            WorkDetailDisclosure.seriesDigest(
-                title: "The Coast Road", position: 0, partCount: nil, wordCount: 141_000
-            ) == "The Coast Road · \(compact) words"
+            WorkDetailDisclosure.seriesDigest(title: "The Coast Road", position: 0) == "The Coast Road"
         )
+        let words = WorkDetailDisclosure.seriesWordsLabel(141_000)
         #expect(
-            WorkDetailDisclosure.seriesDigest(
-                title: "The Coast Road", position: 0, partCount: nil, wordCount: nil
-            ) == "The Coast Road"
+            WorkDetailDisclosure.seriesSubtitle(
+                position: 2, partCount: 3, wordCount: 141_000, isComplete: false
+            ) == "Part 2 of 3 · \(words) · in progress"
         )
+        #expect(!WorkDetailDisclosure.seriesDigest(title: "The Coast Road", position: 2).contains("word"))
     }
 
     @Test func seriesSubtitleMatchesBoardPartWordsAndCompletionFormat() {
@@ -74,11 +71,19 @@ struct WorkDetailBoardCopyTests {
         )
     }
 
-    @Test func menuMembershipDetailMatchesWorkActionsBoard() {
-        #expect(WorkDetailDisclosure.menuMembershipDetail(count: 0) == nil)
-        #expect(WorkDetailDisclosure.menuMembershipDetail(count: -1) == nil)
-        #expect(WorkDetailDisclosure.menuMembershipDetail(count: 1) == "In 1")
-        #expect(WorkDetailDisclosure.menuMembershipDetail(count: 3) == "In 3")
+    @Test func menuMembershipDetailUsesTheExistingQueueAndCollectionLabels() {
+        #expect(WorkDetailDisclosure.menuQueueDetail(count: 0) == nil)
+        #expect(WorkDetailDisclosure.menuQueueDetail(count: -1) == nil)
+        #expect(WorkDetailDisclosure.menuCollectionDetail(count: 0) == nil)
+        #expect(
+            WorkDetailDisclosure.menuQueueDetail(count: 3) == WorkDetailPresentation.queueLabel(count: 3)
+        )
+        #expect(
+            WorkDetailDisclosure.menuCollectionDetail(count: 1)
+                == WorkDetailPresentation.collectionLabel(count: 1)
+        )
+        #expect(WorkDetailPresentation.queueLabel(count: 3).contains("Queue"))
+        #expect(WorkDetailPresentation.collectionLabel(count: 1).contains("Collection"))
     }
 
     @Test func commentsRowFormatsCountAndVoiceOverLabel() {

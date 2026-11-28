@@ -41,13 +41,13 @@ struct AO3WorkActionsMenu: View {
                 actions.startViewingComments(context: workContext,
                                              initialChapterPosition: commentsInitialChapterPosition)
             } label: {
-                if let commentCount {
-                    Text("Comments")
-                    Text(commentCount.formatted())
-                    Image(systemName: "bubble.left.and.bubble.right")
-                } else {
-                    Label("Comments", systemImage: "bubble.left.and.bubble.right")
+                // One shape either way. A conditional Label-versus-tuple is a
+                // different view type, and a menu can drop the icon on that branch.
+                Text("Comments")
+                if let text = WorkDetailCommentsRow.countText(commentCount) {
+                    Text(text)
                 }
+                Image(systemName: "bubble.left.and.bubble.right")
             }
 
             Button { actions.markForLater(workID: workID, auth: auth) } label: {
