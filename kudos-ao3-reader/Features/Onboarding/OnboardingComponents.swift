@@ -1,10 +1,11 @@
 import SwiftUI
 
-/// Shared first-launch onboarding scaffold — a scrolling intro area over a
-/// themed base background, and a bottom action bar on the themed raised surface
-/// with matching padding/width. Both surfaces follow the app theme (including
-/// Sepia). Used by `WelcomeView` and `SyncFolderOnboardingView`.
+/// Shared themed layout for first-launch screens. At accessibility sizes the
+/// content and actions scroll together so all rows remain reachable.
 struct OnboardingScaffold<Content: View, Footer: View>: View {
+    var introSpacing: CGFloat
+    var topInset: CGFloat
+    var bottomInset: CGFloat
     @ViewBuilder var content: Content
     @ViewBuilder var footer: Footer
 
@@ -34,11 +35,11 @@ struct OnboardingScaffold<Content: View, Footer: View>: View {
     }
 
     private var scrollingIntro: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: introSpacing) {
             content
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 44)
+        .padding(.horizontal, 32)
+        .padding(.top, topInset)
         .padding(.bottom, 24)
         .frame(maxWidth: 540)
         .frame(maxWidth: .infinity)
@@ -46,25 +47,11 @@ struct OnboardingScaffold<Content: View, Footer: View>: View {
 
     private var pinnedFooter: some View {
         footer
-            .padding(.horizontal, 28)
+            .padding(.horizontal, 32)
             .padding(.top, 14)
-            .padding(.bottom, 22)
+            .padding(.bottom, bottomInset)
             .frame(maxWidth: 540)
             .frame(maxWidth: .infinity)
-            // The themed raised surface, not `.bar`: a system material resolves
-            // to its own near-white chrome and ignores the app theme entirely,
-            // so under Sepia this bar rendered solid white against the warm
-            // cream page above it (owner-reported). `cardSurface` is the
-            // codebase's existing token for exactly this — its
-            // `appElevatedBackground` doc calls out "list/form cells, bars,
-            // popovers" — and it keeps the same one-step lift over
-            // `backgroundColor` that `.bar` provided, while falling back to
-            // `secondarySystemGroupedBackground`/`controlBackgroundColor` on
-            // Light/Dark where no custom theme colour exists. Nothing is lost
-            // by dropping the material: this footer is a sibling *below* the
-            // ScrollView in the VStack, never an overlay, so no content ever
-            // scrolls behind it for the blur to reveal.
-            .background(theme.appTheme.cardSurface)
     }
 
     /// The themed app background, falling back to the platform's default surface
@@ -98,18 +85,22 @@ struct OnboardingPointRow: View {
     let symbol: String
     let title: String
     let message: String
+    var iconWidth: CGFloat = 36
+    var horizontalSpacing: CGFloat = 16
+    var messageFont: Font = .subheadline
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: horizontalSpacing) {
             Image(systemName: symbol)
                 .font(.title2)
                 .foregroundStyle(.tint)
-                .frame(width: 32)
+                .frame(width: iconWidth)
+                .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.headline)
                 Text(message)
-                    .font(.subheadline)
+                    .font(messageFont)
                     .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
             }

@@ -11,7 +11,7 @@ struct WelcomeView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        OnboardingScaffold {
+        OnboardingScaffold(introSpacing: 48, topInset: 18, bottomInset: 6) {
             header
             points
         } footer: {
@@ -20,37 +20,27 @@ struct WelcomeView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             Image("AppIconArt")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 108, height: 108)
+                .frame(width: 96, height: 96)
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .shadow(color: .black.opacity(0.15), radius: 9, y: 4)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 8) {
-                Text("\(Text("Welcome to").foregroundStyle(.primary))\n\(Text("Kudos").foregroundStyle(.accentInk))")
-                    .font(.largeTitle.bold())
-                    .multilineTextAlignment(.center)
-                Text("Free to use • Ad-free • Built by fans")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.secondaryInk)
-                    .multilineTextAlignment(.center)
-            }
+            Text("\(Text("Welcome to").foregroundStyle(.primary))\n\(Text("Kudos").foregroundStyle(.accentInk))")
+                .font(.largeTitle.weight(.heavy))
+                .multilineTextAlignment(.center)
+                .accessibilityAddTraits(.isHeader)
         }
     }
 
     private var points: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            #if os(iOS)
-            let readAnywhereMessage = "Download works and read them offline, with themes, fonts, and Read Aloud."
-            #else
-            let readAnywhereMessage = "Download works and read them offline, with themes and custom fonts."
-            #endif
+        VStack(alignment: .leading, spacing: 28) {
             OnboardingPointRow(
                 symbol: "book", title: "Read anywhere",
-                message: readAnywhereMessage
+                message: WelcomeBoardCopy.readAnywhere
             )
             OnboardingPointRow(
                 symbol: "heart", title: "All of AO3, native",
@@ -58,26 +48,32 @@ struct WelcomeView: View {
             )
             OnboardingPointRow(
                 symbol: "lock.shield", title: "Yours, on this device",
-                message: "Your library, queues, and history stay on your device. No tracking, "
-                    + "and mature works can hide behind Face ID."
+                message: WelcomeBoardCopy.localLibrary(deviceName: ThisDevice.name)
             )
         }
     }
 
     private var footer: some View {
         VStack(spacing: 14) {
-            if let url = URL(string: AppLinks.repository) {
-                Link(destination: url) {
-                    githubLabel
-                }
-                .accessibilityHint("Opens the project's source code in your browser")
-            }
+            Text("Free to use · Ad-free · Built by fans. Kudos is open source and not affiliated with the OTW or AO3.")
+                .font(.footnote)
+                .foregroundStyle(.secondaryInk)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
             Button(action: onContinue) {
                 actionTitle("Continue")
             }
             .buttonStyle(.kudosPrimaryConfirm)
             .onboardingWrapsButton(at: dynamicTypeSize.isAccessibilitySize)
+
+            if let url = URL(string: AppLinks.repository) {
+                Link(destination: url) {
+                    githubLabel
+                }
+                .foregroundStyle(.accentInk)
+                .accessibilityHint("Opens the project’s source code in your browser")
+            }
         }
     }
 
@@ -85,17 +81,12 @@ struct WelcomeView: View {
     private var githubLabel: some View {
         if dynamicTypeSize.isAccessibilitySize {
             // One line was cut once the type outgrew the row.
-            Label {
-                Text("View on GitHub")
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.center)
-            } icon: {
-                Image(systemName: "chevron.left.forwardslash.chevron.right")
-            }
-            .font(.subheadline.weight(.medium))
+            Text("View on GitHub")
+                .font(.subheadline)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.center)
         } else {
-            Label("View on GitHub", systemImage: "chevron.left.forwardslash.chevron.right")
-                .font(.subheadline.weight(.medium))
+            Text("View on GitHub").font(.subheadline)
         }
     }
 
@@ -110,5 +101,20 @@ struct WelcomeView: View {
         } else {
             title.frame(maxWidth: .infinity)
         }
+    }
+}
+
+enum WelcomeBoardCopy {
+    static var readAnywhere: String {
+        #if os(iOS)
+        "Download works and read them offline, with themes, fonts and Read Aloud."
+        #else
+        "Download works and read them offline, with themes and custom fonts."
+        #endif
+    }
+
+    static func localLibrary(deviceName: String) -> String {
+        "Your library, queues and history stay on your \(deviceName)."
+            + (deviceName == "iPhone" ? " Mature works can hide behind Face ID." : "")
     }
 }
