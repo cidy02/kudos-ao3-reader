@@ -516,6 +516,6 @@ nonisolated enum PDFParagraphRepair {
         let word = text[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
         guard standaloneHeadings.contains(word) else { return false }
         let subtitle = text[text.index(after: colon)...].trimmingCharacters(in: .whitespaces)
-        return !PlainTextWorkConverter.hasMultipleSentences(subtitle)
+        return !PlainTextWorkConverter.isProseSubtitle(subtitle)
     }
 }

@@ -48,7 +48,8 @@ nonisolated enum ImportedDocumentConverter {
     ///       margin page numbers dropped, visual chapter headings, "Preface" front matter, and prose no
     ///       longer read as a heading (`.txt` imports share the heading rules). Not bumped when it landed,
     ///       so the reader's Rebuild pill and Work Details treated every converted work as current.
-    static let converterVersion = 10
+    /// - 11 — short, capitalized chapter titles with multiple sentences are kept in PDF and plain-text imports (T-579g).
+    static let converterVersion = 11
 
     enum ConversionError: LocalizedError, Equatable {
         /// A format a later task in this series will handle.

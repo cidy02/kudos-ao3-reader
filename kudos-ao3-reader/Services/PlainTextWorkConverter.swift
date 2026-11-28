@@ -201,14 +201,20 @@ nonisolated enum PlainTextWorkConverter {
                 return true
             }
             let subtitle = nsText.substring(with: subtitleRange)
-            return !hasMultipleSentences(subtitle)
+            return !isProseSubtitle(subtitle)
         }
         return false
     }
 
+    /// A short, capitalized subtitle can be a title even when it has multiple sentences.
+    static func isProseSubtitle(_ subtitle: String) -> Bool {
+        let startsLowercase = subtitle.first?.isLowercase == true
+        let wordCount = subtitle.split(whereSeparator: \.isWhitespace).count
+        return (startsLowercase || wordCount > 8) && hasMultipleSentences(subtitle)
+    }
+
     /// True when `text` contains an internal sentence boundary (`.`, `!`, or `?` followed
-    /// by whitespace and more words), so prose like `Part one: get in. Part two: get out.`
-    /// is rejected as a heading while titles with abbreviations (`Mr. Smith`) stay valid.
+    /// by whitespace and more words). Periods in abbreviations such as `Mr. Smith` do not count.
     static func hasMultipleSentences(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
