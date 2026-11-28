@@ -606,6 +606,85 @@ struct ReadingLogTests {
         #expect(bars[0].weekStart < bars[1].weekStart)
     }
 
+    @Test func boundedTimelineAndHomeMatchFullLogAcrossWeekEdges() throws {
+        let context = try context()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+        calendar.firstWeekday = 2
+        let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 8, hour: 12)))
+        let week = try #require(calendar.dateInterval(of: .weekOfYear, for: now))
+        let reread = SavedWork(title: "Reread", author: "A")
+        reread.chapters = "5/5"
+        reread.wordCount = 10_000
+        reread.chapterWordCounts = [1_000, 2_000, 3_000, 4_000]
+        let other = SavedWork(title: "Other visible work", author: "A")
+        let excluded = SavedWork(title: "Excluded", author: "A")
+        for work in [reread, other, excluded] { context.insert(work) }
+        let deletedID = UUID()
+
+        @discardableResult
+        func insert(_ id: UUID, at start: Date, seconds: Double = 300,
+                    progress: Double = 0, startProgress: Double? = nil, finished: Bool = false,
+                    words: Int = 0, chapters: Int = 0) -> ReadingSession {
+            let row = ReadingSession(
+                workID: id, startedAt: start, endedAt: start.addingTimeInterval(seconds),
+                durationSeconds: seconds, startProgress: startProgress, endingProgress: progress,
+                wordCount: words, chapterCountAtVisit: chapters, didFinish: finished
+            )
+            context.insert(row)
+            return row
+        }
+
+        for day in -2...5 {
+            let start = try #require(calendar.date(byAdding: .day, value: day, to: week.start))
+            if day == -1 {
+                insert(reread.id, at: start, progress: 1, finished: true, words: 10_000, chapters: 5)
+            } else if day == 0 {
+                insert(reread.id, at: start, progress: 0.25, words: 10_000, chapters: 5)
+            } else {
+                insert(other.id, at: start)
+            }
+        }
+        let beforeStreak = try #require(calendar.date(byAdding: .day, value: -3, to: week.start))
+        insert(deletedID, at: beforeStreak)
+        insert(excluded.id, at: beforeStreak)
+        insert(deletedID, at: now, finished: true)
+        insert(excluded.id, at: now, finished: true)
+        let acrossMidnight = insert(
+            reread.id, at: week.end.addingTimeInterval(-300), seconds: 900,
+            progress: 0.75, startProgress: 0, words: 10_000, chapters: 5
+        )
+        // This visit validates the EPUB's chapter counts for earlier visits.
+        let atEnd = insert(reread.id, at: week.end, progress: 1, finished: true, words: 10_000, chapters: 4)
+        try context.save()
+
+        let all = try context.fetch(FetchDescriptor<ReadingSession>())
+        let works = [reread, other]
+        let visible = all.filter { [reread.id, other.id].contains($0.workID) }
+        let fullFacts = ReadingLogService.facts(from: visible, works: works)
+        let full = ReadingHistoryTimeline.make(
+            scope: .week, containing: now, facts: fullFacts, now: now, calendar: calendar
+        )
+        let bounded = try ReadingHistoryTimeline.make(
+            scope: .week, containing: now, works: works, in: context, now: now, calendar: calendar
+        )
+        let sittings = bounded.days.flatMap(\.sittings)
+        #expect(bounded == full)
+        #expect(bounded.streakDays == 9)
+        #expect(bounded.wordsRead == 7_500)
+        #expect(sittings.first { $0.id == acrossMidnight.id }?.readThrough == 2)
+        #expect(sittings.first { $0.id == acrossMidnight.id }?.durationSeconds == 900)
+        #expect(!sittings.contains { $0.id == atEnd.id || $0.workID == deletedID || $0.workID == excluded.id })
+
+        let homeFacts = ReadingLogService.facts(
+            from: all.sorted { $0.startedAt > $1.startedAt }, works: [reread, other, excluded]
+        )
+        let home = try HomeReadingStats.calculate(in: context, now: now, calendar: calendar)
+        #expect(home == HomeReadingStats.calculate(facts: homeFacts, now: now, calendar: calendar))
+        #expect(home.streakDays == 10)
+        #expect(home.finishedCount == 3)
+    }
+
     @Test func tagCountsCountEachTagOncePerWorkWithASession() throws {
         let firstID = UUID()
         let secondID = UUID()

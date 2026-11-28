@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// Reading History's Week / Month / Year control (T-462; board 02, and the older
 /// History-Month and History-Year boards).
@@ -223,6 +224,48 @@ nonisolated struct ReadingHistoryTimeline: Equatable, Sendable {
 
     // MARK: Building
 
+    @MainActor
+    static func make(
+        scope: ReadingHistoryScope,
+        containing reference: Date,
+        works: [SavedWork],
+        in context: ModelContext,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) throws -> ReadingHistoryTimeline {
+        let period = interval(for: scope, containing: reference, calendar: calendar)
+        let visibleIDs = Set(works.map(\.id))
+        let periodSessions = try ReadingLogService.sessions(startingIn: period, in: context)
+            .filter { visibleIDs.contains($0.workID) }
+        let readIDs = Set(periodSessions.map(\.workID))
+        let history = try ReadingLogService.history(for: readIDs, in: context)
+        // A later visit can validate the EPUB's chapter counts against its own
+        // chapter and word totals. Keep it in the word-credit history even
+        // though only earlier visits can affect rail labels and read-throughs.
+        let priorSessions = history.filter { $0.startedAt < period.start }
+        let facts = ReadingLogService.facts(
+            from: periodSessions + priorSessions,
+            works: works.filter { readIDs.contains($0.id) },
+            history: history
+        )
+        let isCurrent = period.start <= now && now < period.end
+        let streakDays = try ReadingLogService.streak(
+            through: isCurrent ? now : period.end.addingTimeInterval(-1),
+            isToday: isCurrent,
+            calendar: calendar,
+            in: context,
+            visibleWorkIDs: visibleIDs
+        )
+        return make(scope: scope, containing: reference, facts: facts, now: now, calendar: calendar,
+                    knownStreakDays: streakDays)
+    }
+
+    private static func interval(for scope: ReadingHistoryScope, containing reference: Date, calendar: Calendar)
+        -> DateInterval {
+        calendar.dateInterval(of: scope.component, for: reference)
+            ?? DateInterval(start: calendar.startOfDay(for: reference), duration: 86_400)
+    }
+
     /// The period of `scope` holding `reference`, built from `facts`.
     ///
     /// `facts` is **every** sitting of the works on the page, not only this
@@ -233,23 +276,23 @@ nonisolated struct ReadingHistoryTimeline: Equatable, Sendable {
         containing reference: Date,
         facts: [ReadingSessionFacts],
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        knownStreakDays: Int? = nil
     ) -> ReadingHistoryTimeline {
-        let period = calendar.dateInterval(of: scope.component, for: reference)
-            ?? DateInterval(start: calendar.startOfDay(for: reference), duration: 86_400)
+        let period = interval(for: scope, containing: reference, calendar: calendar)
         var timeline = ReadingHistoryTimeline(
             scope: scope, period: period, isCurrent: period.start <= now && now < period.end
         )
 
-        let starts = ReadingInsights.startingProgress(of: facts)
-        let throughs = readThroughs(of: facts)
         // Half-open, so a sitting at the stroke of the next period is only in that one.
-        let inPeriod = facts.indices.filter {
-            period.start <= facts[$0].startedAt && facts[$0].startedAt < period.end
-        }
-        let periodFacts = inPeriod.map { facts[$0] }
-        let sittings = inPeriod.map { index in
-            let fact = facts[index]
+        let periodFacts = facts.filter { period.start <= $0.startedAt && $0.startedAt < period.end }
+        let workIDs = Set(periodFacts.map(\.workID))
+        let chronology = facts.filter { $0.startedAt < period.end && workIDs.contains($0.workID) }
+        let starts = ReadingInsights.startingProgress(of: chronology)
+        let throughs = readThroughs(of: chronology)
+        let sittings = chronology.indices.compactMap { index -> Sitting? in
+            let fact = chronology[index]
+            guard period.start <= fact.startedAt else { return nil }
             return Sitting(
                 id: fact.sessionID ?? UUID(),
                 workID: fact.workID,
@@ -279,7 +322,7 @@ nonisolated struct ReadingHistoryTimeline: Equatable, Sendable {
         timeline.buckets = buckets(for: scope, period: period, sittings: sittings, now: now, calendar: calendar)
         timeline.daysRead = timeline.days.count
         timeline.daysElapsed = elapsedDays(of: period, now: now, calendar: calendar)
-        timeline.streakDays = streak(
+        timeline.streakDays = knownStreakDays ?? streak(
             through: timeline.isCurrent ? now : period.end.addingTimeInterval(-1),
             isToday: timeline.isCurrent,
             facts: facts,
@@ -359,12 +402,21 @@ nonisolated struct ReadingHistoryTimeline: Equatable, Sendable {
         calendar: Calendar
     ) -> Int {
         let readingDays = Set(facts.map { calendar.startOfDay(for: $0.startedAt) })
+        return streak(through: lastDay, isToday: isToday, calendar: calendar) { readingDays.contains($0) }
+    }
+
+    static func streak(
+        through lastDay: Date,
+        isToday: Bool,
+        calendar: Calendar,
+        hasReadingOn: (Date) throws -> Bool
+    ) rethrows -> Int {
         var day = calendar.startOfDay(for: lastDay)
-        if isToday, !readingDays.contains(day), let yesterday = calendar.date(byAdding: .day, value: -1, to: day) {
+        if isToday, try !hasReadingOn(day), let yesterday = calendar.date(byAdding: .day, value: -1, to: day) {
             day = calendar.startOfDay(for: yesterday)
         }
         var count = 0
-        while readingDays.contains(day) {
+        while try hasReadingOn(day) {
             count += 1
             guard let previous = calendar.date(byAdding: .day, value: -1, to: day) else { break }
             day = calendar.startOfDay(for: previous)

@@ -509,6 +509,75 @@ struct InsightsGatherTests {
         }
     }
 
+    @Test func actorPeriodFiguresMatchFullLogAcrossRecordedTimeZoneEdges() async throws {
+        let f = try makeFixture()
+        let work = try #require(f.liveWorks.first { $0.ao3WorkID == 1001 })
+        let now = date(month: 8, day: 31)
+        let previousEdge = ReadingSession(
+            workID: work.id, startedAt: date(month: 8, day: 1, hour: 1), endedAt: date(month: 8, day: 1, hour: 5),
+            durationSeconds: 777, tzOffsetSeconds: 0, endingProgress: 0.4, wordCount: work.wordCount
+        )
+        let reread = ReadingSession(
+            workID: work.id, startedAt: date(month: 9, day: 1, hour: 5), endedAt: date(month: 9, day: 1, hour: 6),
+            durationSeconds: 567, tzOffsetSeconds: -5 * 3_600, startProgress: 0, endingProgress: 1,
+            wordCount: work.wordCount, didFinish: true
+        )
+        let nextEdge = ReadingSession(
+            workID: work.id, startedAt: date(month: 9, day: 1, hour: 9), endedAt: date(month: 9, day: 1, hour: 10),
+            durationSeconds: 999, tzOffsetSeconds: -5 * 3_600
+        )
+        for row in [previousEdge, reread, nextEdge] {
+            row.chapterWords = [1: 500]
+            row.chapterSeconds = [1: 60]
+            f.context.insert(row)
+        }
+        try f.context.save()
+
+        let scope = HomeReadingStats.insightsScope(.main, from: f.liveWorks, hideMature: true, revealed: false)
+        let aliases = TagAliasStore.resolver(in: f.context)
+        let raw = try f.context.fetch(FetchDescriptor<ReadingSession>())
+        let scoped = scope.sessions(raw, in: f.context)
+        for includeRereads in [true, false] {
+            let options = InsightsOptions(
+                countRereads: includeRereads,
+                countReadAloud: includeRereads,
+                excludedFandoms: ["Muted Fandom"],
+                excludedWorkIDs: [f.excludedWork.id.uuidString]
+            )
+            let filtered = options.filter(sessions: scoped, works: scope.readingWorks, aliases: aliases)
+            let facts = ReadingLogService.facts(
+                from: filtered.sessions, works: filtered.works, history: filtered.historySessions, aliases: aliases
+            )
+            let current = facts.filter { ReadingInsights.isInPeriod($0, period: aug, calendar: utcCalendar) }
+            let previous = facts.filter { ReadingInsights.isInPeriod($0, period: jul, calendar: utcCalendar) }
+            let expected = ReadingInsights.make(
+                facts: current, previousPeriodFacts: previous,
+                dayRange: ReadingInsights.chartDays(for: aug, now: now, calendar: utcCalendar),
+                calendar: utcCalendar, aliases: aliases
+            )
+            let expectedTiming = InsightsProvenance.chapterTiming(
+                sessions: filtered.sessions.filter { ReadingInsights.isInPeriod($0, period: aug, calendar: utcCalendar) },
+                paceHistorySessions: filtered.sessions.filter {
+                    ReadingInsights.readingDay(for: $0, calendar: utcCalendar) < aug.end
+                }
+            )
+            let request = InsightsGatherRequest(
+                period: aug, previousPeriod: jul, calendar: utcCalendar, options: options,
+                hideMature: true, computesDigest: false, now: now, batchSize: 2
+            )
+            let result = try await InsightsGatherActor(modelContainer: f.container).gather(request)
+            #expect(result.main.insights == expected)
+            #expect(result.main.chapterTiming == expectedTiming)
+            #expect(previous.contains { $0.sessionID == previousEdge.id })
+            #expect(current.contains { $0.sessionID == reread.id } == includeRereads)
+            #expect(!current.contains { $0.sessionID == nextEdge.id || $0.workID == f.excludedWork.id })
+            #expect(current.contains { $0.title == "Purged General Fic" })
+            #expect(!current.contains { $0.title == "Purged Explicit Fic" || $0.title == "Soft Deleted Mature" })
+            let rereadSeconds = includeRereads ? reread.durationSeconds : 0
+            #expect(result.main.habits.rereadTimeShare == rereadSeconds / expected.totalSeconds)
+        }
+    }
+
     @Test func actorDigestMatchesMainActorDigestAndStreamsInBoundedBatches() async throws {
         let f = try makeFixture()
         let legacyDigest = InsightsReloadDigest.snapshot(

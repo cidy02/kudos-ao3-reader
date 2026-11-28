@@ -332,9 +332,9 @@ enum ReadingLogService {
         let chapterTitle = WorkReadingPosition.title(from: work.readiumLocator) ?? ""
         let endingProgress = min(1, max(0, work.readingProgress ?? 0))
         let recordID = session.recordID
-        let existing = try? context.fetch(
-            FetchDescriptor<ReadingSession>(predicate: #Predicate { $0.id == recordID })
-        ).first
+        var descriptor = FetchDescriptor<ReadingSession>(predicate: #Predicate { $0.id == recordID })
+        descriptor.fetchLimit = 1
+        let existing = try? context.fetch(descriptor).first
 
         if let existing {
             if !existing.hasMetadataSnapshot { existing.snapshot(from: work) }
@@ -425,20 +425,10 @@ enum ReadingLogService {
         var skimmed = Set(row.skimmedChapters)
         if fresh.values.contains(where: { $0 >= ChapterTiming.skimMinimumWords }) {
             let ownID = row.id
-            let others = (try? context.fetch(FetchDescriptor<ReadingSession>(
-                predicate: #Predicate { $0.id != ownID && $0.modeRaw == "read" }
-            ))) ?? []
-            let samples = others.flatMap {
-                ChapterTiming.paceSamples(
-                    seconds: $0.chapterSeconds,
-                    words: $0.chapterWords,
-                    skimmed: $0.skimmedChapters
-                )
-            }
             skimmed.formUnion(ChapterTiming.skimmedChapters(
                 seconds: session.chapterSeconds,
                 words: fresh,
-                medianWordsPerSecond: ChapterTiming.medianWordsPerSecond(samples)
+                medianWordsPerSecond: chapterPace(excluding: ownID, in: context)
             ))
         }
         row.skimmedChapters = skimmed.sorted()
@@ -447,6 +437,19 @@ enum ReadingLogService {
             if let story = session.storyChapterBySpine[spine] { skimmedStory.insert(story) }
         }
         row.skimmedStoryChapters = skimmedStory.sorted()
+    }
+
+    private static func chapterPace(excluding ownID: UUID, in context: ModelContext) -> Double? {
+        // Keep the lifetime median across works. Rows without either measurement
+        // contribute no samples, including visits from before chapter timing.
+        let descriptor = FetchDescriptor<ReadingSession>(predicate: #Predicate {
+            $0.id != ownID && $0.modeRaw == "read" && $0.chapterWordsJSON != nil && $0.chapterSecondsJSON != nil
+        })
+        let rows = (try? context.fetch(descriptor)) ?? []
+        let samples = rows.flatMap {
+            ChapterTiming.paceSamples(seconds: $0.chapterSeconds, words: $0.chapterWords, skimmed: $0.skimmedChapters)
+        }
+        return ChapterTiming.medianWordsPerSecond(samples)
     }
 
     /// How far through its chapter the work's saved position is: Readium's fraction of the
@@ -619,17 +622,73 @@ enum ReadingLogService {
     // MARK: Queries
 
     static func sessions(in context: ModelContext, interval: DateInterval) -> [ReadingSession] {
-        let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        return all.filter { interval.contains($0.startedAt) }
-            .sorted { $0.startedAt > $1.startedAt }
+        (try? context.fetch(weeklySessionDescriptor(in: interval))) ?? []
+    }
+
+    /// Home and the weekly bars use DateInterval's inclusive end.
+    static func weeklySessionDescriptor(in interval: DateInterval) -> FetchDescriptor<ReadingSession> {
+        let start = interval.start
+        let end = interval.end
+        return FetchDescriptor<ReadingSession>(
+            predicate: #Predicate { $0.startedAt >= start && $0.startedAt <= end },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+    }
+
+    /// History and calendar days are half-open and attribute a sitting to its start.
+    static func sessions(startingIn interval: DateInterval, in context: ModelContext) throws -> [ReadingSession] {
+        let start = interval.start
+        let end = interval.end
+        return try context.fetch(FetchDescriptor<ReadingSession>(predicate: #Predicate {
+            $0.startedAt >= start && $0.startedAt < end
+        }))
+    }
+
+    /// All sittings for the works selected by a period query. Small batches keep
+    /// the predicate within the store's parameter limit when a year spans many works.
+    static func history(for workIDs: Set<UUID>, in context: ModelContext) throws -> [ReadingSession] {
+        let ids = Array(workIDs)
+        let batchSize = 400
+        var sessions: [ReadingSession] = []
+        for offset in stride(from: 0, to: ids.count, by: batchSize) {
+            let batch = Array(ids[offset..<min(offset + batchSize, ids.count)])
+            let descriptor = FetchDescriptor<ReadingSession>(predicate: #Predicate {
+                batch.contains($0.workID)
+            })
+            sessions.append(contentsOf: try context.fetch(descriptor))
+        }
+        return sessions
+    }
+
+    /// Only walks back through occupied days and the first gap. A week per fetch
+    /// avoids materializing the log when a streak reaches into earlier periods.
+    static func streak(
+        through lastDay: Date,
+        isToday: Bool,
+        calendar: Calendar,
+        in context: ModelContext,
+        visibleWorkIDs: Set<UUID>? = nil
+    ) throws -> Int {
+        if visibleWorkIDs?.isEmpty == true { return 0 }
+        var window: DateInterval?
+        var readingDays: Set<Date> = []
+        return try ReadingHistoryTimeline.streak(through: lastDay, isToday: isToday, calendar: calendar) { day in
+            if window.map({ $0.start <= day && day < $0.end }) != true {
+                guard let end = calendar.dateInterval(of: .day, for: day)?.end else { return false }
+                let first = calendar.date(byAdding: .day, value: -6, to: day) ?? day
+                let interval = DateInterval(start: calendar.startOfDay(for: first), end: end)
+                let rows = try sessions(startingIn: interval, in: context)
+                readingDays = Set(rows.lazy.filter { visibleWorkIDs?.contains($0.workID) ?? true }
+                    .map { calendar.startOfDay(for: $0.startedAt) })
+                window = interval
+            }
+            return readingDays.contains(day)
+        }
     }
 
     /// Every work's log summary, in **one** fetch.
     ///
-    /// The per-work helpers below each fetch the whole session table, which is fine
-    /// for a detail screen asking about one work and quadratic for a history list
-    /// asking about three hundred. Any screen rendering a list of works wants this
-    /// one instead.
+    /// List screens can use this instead of issuing one query per work.
     static func summaries(in context: ModelContext) -> [UUID: WorkReadingSummary] {
         let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
         var summaries: [UUID: WorkReadingSummary] = [:]
@@ -653,8 +712,7 @@ enum ReadingLogService {
     }
 
     static func totalDuration(of workID: UUID, in context: ModelContext) -> Double {
-        let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        return all.filter { $0.workID == workID }.reduce(0) { $0 + $1.durationSeconds }
+        sessions(for: workID, in: context).reduce(0) { $0 + $1.durationSeconds }
     }
 
     /// Total duration including any in-flight session.
@@ -664,9 +722,8 @@ enum ReadingLogService {
     /// `accumulatedSeconds` would count the same time twice.
     static func currentTotalDuration(of workID: UUID, in context: ModelContext, now: Date = Date()) -> Double {
         let open = openSessions[workID]
-        let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        var duration = all
-            .filter { $0.workID == workID && $0.id != open?.recordID }
+        var duration = sessions(for: workID, in: context)
+            .filter { $0.id != open?.recordID }
             .reduce(0) { $0 + $1.durationSeconds }
         if let open {
             let currentStretch = open.isPaused ? 0 : max(0, now.timeIntervalSince(open.lastResumedAt))
@@ -677,13 +734,19 @@ enum ReadingLogService {
 
     /// Reread count: finishing sessions for this work UUID, not the title.
     static func finishCount(of workID: UUID, in context: ModelContext) -> Int {
-        let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        return all.filter { $0.workID == workID && $0.didFinish }.count
+        let descriptor = FetchDescriptor<ReadingSession>(predicate: #Predicate {
+            $0.workID == workID && $0.didFinish
+        })
+        return (try? context.fetchCount(descriptor)) ?? 0
     }
 
     static func lastSession(of workID: UUID, in context: ModelContext) -> ReadingSession? {
-        let all = (try? context.fetch(FetchDescriptor<ReadingSession>())) ?? []
-        return all.filter { $0.workID == workID }.max { $0.endedAt < $1.endedAt }
+        sessions(for: workID, in: context).max { $0.endedAt < $1.endedAt }
+    }
+
+    private static func sessions(for workID: UUID, in context: ModelContext) -> [ReadingSession] {
+        let descriptor = FetchDescriptor<ReadingSession>(predicate: #Predicate { $0.workID == workID })
+        return (try? context.fetch(descriptor)) ?? []
     }
 
     /// Weekly bars for 1bi. Duration is attributed to the week the session
@@ -802,11 +865,12 @@ enum ReadingLogService {
                 ($0.startedAt, $0.id.uuidString) < ($1.startedAt, $1.id.uuidString)
             }
             let work = worksByID[workID]
-            if let work, canUseChapterWordCounts(work.chapterWordCounts, for: work, sessions: sorted) {
+            let counts = work?.chapterWordCounts ?? []
+            if let work, canUseChapterWordCounts(counts, for: work, sessions: sorted) {
                 chapterPathSessions.formUnion(sorted.map { $0.id })
                 chapterWordsRead(
                     sortedSessions: sorted,
-                    chapterCounts: work.chapterWordCounts,
+                    chapterCounts: counts,
                     into: &read
                 )
             } else {
@@ -817,7 +881,8 @@ enum ReadingLogService {
         // judgement is used as is (never re-derived), and a sitting cannot go below zero.
         // On the chapter path a skimmed chapter's coverage was left uncredited while it was being
         // attributed (so a later full read still earns it); only the legacy path deducts here.
-        for session in sessions where !chapterPathSessions.contains(session.id) {
+        for session in sessions where session.skimmedChaptersJSON != nil
+            && session.chapterWordsJSON != nil && !chapterPathSessions.contains(session.id) {
             let words = session.chapterWords
             let skimmedWords = session.skimmedChapters.reduce(0) { $0 + (words[$1] ?? 0) }
             if skimmedWords > 0, let credited = read[session.id] {
@@ -1182,16 +1247,12 @@ enum ReadingLogService {
             history: filtered.historySessions,
             aliases: resolvedAliases
         )
-        let periodFacts = allFacts.filter {
-            ReadingInsights.isInPeriod($0, period: req.period, calendar: req.calendar)
-        }
-        let previousFacts = req.previousPeriod.map { interval in
-            allFacts.filter { ReadingInsights.isInPeriod($0, period: interval, calendar: req.calendar) }
-        } ?? []
+        let periods = insightsPeriods(from: allFacts, sessions: filtered.sessions, request: req)
+        let periodFacts = periods.current
 
         let figures = ReadingInsights.make(
             facts: periodFacts,
-            previousPeriodFacts: previousFacts,
+            previousPeriodFacts: periods.previous,
             dayRange: ReadingInsights.chartDays(for: req.period, now: req.now, calendar: req.calendar),
             calendar: req.calendar,
             aliases: resolvedAliases
@@ -1211,15 +1272,9 @@ enum ReadingLogService {
             aliases: resolvedAliases,
             now: req.now
         )
-        let periodSessions = filtered.sessions.filter { (session: ReadingSession) -> Bool in
-            ReadingInsights.isInPeriod(session, period: req.period, calendar: req.calendar)
-        }
-        let paceHistorySessions = filtered.sessions.filter { (session: ReadingSession) -> Bool in
-            ReadingInsights.readingDay(for: session, calendar: req.calendar) < req.period.end
-        }
         let chapterTiming = InsightsProvenance.chapterTiming(
-            sessions: periodSessions,
-            paceHistorySessions: paceHistorySessions
+            sessions: periods.sessions,
+            paceHistorySessions: periods.paceHistory
         )
         let library = ReadingLibraryInsights.make(
             works: libraryWorks,
@@ -1268,6 +1323,41 @@ enum ReadingLogService {
             filteredSessions: filtered.sessions,
             discreetMasker: masker
         )
+    }
+
+    /// Facts and sessions are in the same order. Resolve the recorded time zone
+    /// and the 4 a.m. boundary once for the overview, comparison and chapter figures.
+    private nonisolated static func insightsPeriods(
+        from facts: [ReadingSessionFacts],
+        sessions: [ReadingSession],
+        request: GatherRequest
+    ) -> (
+        current: [ReadingSessionFacts], previous: [ReadingSessionFacts],
+        sessions: [ReadingSession], paceHistory: [ReadingSession]
+    ) {
+        var current: [ReadingSessionFacts] = []
+        var previous: [ReadingSessionFacts] = []
+        var periodSessions: [ReadingSession] = []
+        var paceHistory: [ReadingSession] = []
+        let currentDays = ReadingInsights.readingDays(in: request.period, calendar: request.calendar)
+        let previousDays = request.previousPeriod.map {
+            ReadingInsights.readingDays(in: $0, calendar: request.calendar)
+        }
+        for (fact, session) in zip(facts, sessions) {
+            let day = ReadingInsights.readingDay(for: fact, calendar: request.calendar)
+            if currentDays.contains(day) {
+                current.append(fact)
+                periodSessions.append(session)
+            }
+            if day < currentDays.upperBound, fact.mode == .read,
+               session.chapterWordsJSON != nil, session.chapterSecondsJSON != nil {
+                paceHistory.append(session)
+            }
+            if previousDays?.contains(day) == true {
+                previous.append(fact)
+            }
+        }
+        return (current, previous, periodSessions, paceHistory)
     }
 
     static func insights(

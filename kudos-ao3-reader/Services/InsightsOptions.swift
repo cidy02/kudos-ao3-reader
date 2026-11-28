@@ -292,8 +292,8 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
         includedWorks.reserveCapacity(works.count)
 
         for work in works {
-            let workIDKey = work.id.uuidString.lowercased()
-            let isWorkIDExcluded = matchers.excludedWorkIDs.contains(workIDKey)
+            let isWorkIDExcluded = !matchers.excludedWorkIDs.isEmpty
+                && matchers.excludedWorkIDs.contains(work.id.uuidString.lowercased())
             if isWorkIDExcluded || isExcluded(work: work, matchers: matchers, aliases: aliases) {
                 excludedLiveWorkIDs.insert(work.id)
                 continue
@@ -305,8 +305,10 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
         includedWorkSessions.reserveCapacity(sessions.count)
 
         for session in sessions {
-            let sessionWorkKey = session.workID.uuidString.lowercased()
-            if matchers.excludedWorkIDs.contains(sessionWorkKey) || excludedLiveWorkIDs.contains(session.workID) {
+            let workID = session.workID
+            let isWorkIDExcluded = !matchers.excludedWorkIDs.isEmpty
+                && matchers.excludedWorkIDs.contains(workID.uuidString.lowercased())
+            if isWorkIDExcluded || excludedLiveWorkIDs.contains(workID) {
                 continue
             }
             if isExcluded(session: session, matchers: matchers, aliases: aliases) {
@@ -339,10 +341,13 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
     }
 
     private func isExcluded(work: SavedWork, matchers: ExclusionMatchers, aliases: TagAliasResolver) -> Bool {
-        let fandomCandidates = work.workFandoms.isEmpty ? work.workTags : work.workFandoms
-        if matchers.containsFandom(fandomCandidates, aliases: aliases) {
-            return true
+        if !matchers.excludedFandomKeys.isEmpty {
+            let fandoms = work.workFandoms
+            if matchers.containsFandom(fandoms.isEmpty ? work.workTags : fandoms, aliases: aliases) {
+                return true
+            }
         }
+        guard !matchers.excludedTagKeys.isEmpty else { return false }
         var tagCandidates: [(String, TagAliasKind?)] = []
         for entry in work.workFreeforms { tagCandidates.append((entry, .freeform)) }
         for entry in work.workTags { tagCandidates.append((entry, .freeform)) }
@@ -355,9 +360,10 @@ nonisolated struct InsightsOptions: Equatable, Sendable {
     }
 
     private func isExcluded(session: ReadingSession, matchers: ExclusionMatchers, aliases: TagAliasResolver) -> Bool {
-        if matchers.containsFandom(session.fandoms, aliases: aliases) {
+        if !matchers.excludedFandomKeys.isEmpty, matchers.containsFandom(session.fandoms, aliases: aliases) {
             return true
         }
+        guard !matchers.excludedTagKeys.isEmpty else { return false }
         var tagCandidates: [(String, TagAliasKind?)] = []
         for entry in session.freeformTags { tagCandidates.append((entry, .freeform)) }
         for entry in session.relationships { tagCandidates.append((entry, .relationship)) }

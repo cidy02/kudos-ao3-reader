@@ -351,13 +351,17 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
     /// Half-open `[start, end)` period membership using the sitting's 4:00-to-4:00
     /// reading day in its recorded time zone (`DateInterval.contains` is closed at `end`,
     /// which would include the next period's first day).
+    static func readingDays(in period: DateInterval, calendar: Calendar) -> Range<Date> {
+        calendar.startOfDay(for: period.start)..<period.end
+    }
+
     static func isInPeriod(
         _ fact: ReadingSessionFacts,
         period: DateInterval,
         calendar: Calendar = .current
     ) -> Bool {
         let day = readingDay(for: fact, calendar: calendar)
-        return day >= calendar.startOfDay(for: period.start) && day < period.end
+        return readingDays(in: period, calendar: calendar).contains(day)
     }
 
     static func isInPeriod(
@@ -366,7 +370,7 @@ nonisolated struct ReadingInsights: Equatable, Sendable {
         calendar: Calendar = .current
     ) -> Bool {
         let day = readingDay(for: session, calendar: calendar)
-        return day >= calendar.startOfDay(for: period.start) && day < period.end
+        return readingDays(in: period, calendar: calendar).contains(day)
     }
 
     /// Like for like: the part of the earlier period `previousPeriodFacts` that spans as many
@@ -1994,11 +1998,10 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
             ReadingInsights.chartDays(for: interval, now: now, calendar: calendar)
         }
         let calDays = ReadingInsights.dailyWordsBuckets(from: facts, in: calendarRange, calendar: calendar)
-        let latestReadingEnd = allFacts
+        let thresholdEnd = periodInterval?.end ?? allFacts
             .map { (fact: ReadingSessionFacts) -> Date in ReadingInsights.readingDay(for: fact, calendar: calendar) }
             .max()
-            .flatMap { (day: Date) -> Date? in calendar.date(byAdding: .day, value: 1, to: day) }
-        let thresholdEnd = periodInterval?.end ?? latestReadingEnd ?? now
+            .flatMap { (day: Date) -> Date? in calendar.date(byAdding: .day, value: 1, to: day) } ?? now
         let thresholds = calendarThresholds(allFacts: allFacts, through: thresholdEnd, calendar: calendar)
         let streak = ReadingInsights.longestStreak(of: facts, calendar: calendar)
         let sittings = ReadingInsights.sittingBuckets(from: facts)
@@ -2042,7 +2045,9 @@ nonisolated struct ReadingHabitsInsights: Equatable, Sendable {
         let periodSessionIDs = Set(facts.compactMap(\.sessionID))
         var alreadyFinished: Set<UUID> = []
         var rereadSeconds = 0.0
-        let orderedFacts = allFacts.sorted(by: ReadingInsights.sittingOrder)
+        let orderedFacts = allFacts.filter { fact in
+            fact.didFinish || fact.sessionID.map { periodSessionIDs.contains($0) } == true
+        }.sorted(by: ReadingInsights.sittingOrder)
         for fact in orderedFacts {
             if let sessionID = fact.sessionID, periodSessionIDs.contains(sessionID),
                alreadyFinished.contains(fact.workID) {
