@@ -46,6 +46,7 @@ struct FolderSyncResult: Equatable {
     var pendingOriginalIDs: Set<UUID> = []
     var omittedOriginalTitles: [String] = []
 
+    var unavailableOriginalIDs: Set<UUID> { pendingOriginalIDs.union(failedOriginalIDs) }
     var hasPendingOriginals: Bool { !failedOriginalIDs.isEmpty || !pendingOriginalIDs.isEmpty }
 
     mutating func absorb(_ summary: KudosBackupRestoreSummary) {
@@ -154,9 +155,8 @@ enum FolderSyncService {
     private static let lastRestoredRemoteStampKey = "folderSyncLastRestoredRemoteStampWithOriginalVersions"
     private static let lastRestoredLegacyStampKey = "folderSyncLastRestoredLegacyStampWithOriginalVersions"
     /// Set when a sync-down couldn't fetch every asset the remote manifest
-    /// references (typically not-yet-uploaded iCloud files). While set, the
-    /// skip-unchanged stamp is withheld so the next sync-down retries the
-    /// fetch even though the manifest itself hasn't changed.
+    /// references (typically not-yet-uploaded iCloud files). This forces the
+    /// next sync-down to retry even when the manifest stamp still matches.
     private static let pendingRemoteAssetsKey = "folderSyncPendingRemoteAssets"
 
     static func snapshot(defaults: UserDefaults = .standard) -> FolderSyncSnapshot {
@@ -231,13 +231,15 @@ enum FolderSyncService {
         defaults: UserDefaults = .standard
     ) async throws -> FolderSyncResult {
         try await runGuarded(defaults: defaults) {
-            var result = try await performSyncDown(in: context, defaults: defaults)
-            // Publishing can drop a remapped archive ID from the manifest or
-            // write an older original back over a correction we couldn't install.
-            if !result.hasPendingOriginals {
-                let upload = try await performSyncUp(in: context, defaults: defaults)
-                result.absorb(upload)
-            }
+            let (download, originalRetryRecords) = try await performSyncDown(in: context, defaults: defaults)
+            let upload = try await performSyncUp(
+                in: context,
+                excludingOriginalIDs: download.unavailableOriginalIDs,
+                originalRetryRecords: originalRetryRecords,
+                defaults: defaults
+            )
+            var result = download
+            result.absorb(upload)
             recordSuccess(result, defaults: defaults)
             return result
         }
@@ -250,7 +252,7 @@ enum FolderSyncService {
     ) async throws -> FolderSyncResult {
         guard snapshot(defaults: defaults).isConnected else { return FolderSyncResult() }
         return try await runGuarded(defaults: defaults) {
-            let result = try await performSyncDown(in: context, defaults: defaults)
+            let (result, _) = try await performSyncDown(in: context, defaults: defaults)
             recordSuccess(result, defaults: defaults)
             return result
         }
@@ -310,8 +312,9 @@ enum FolderSyncService {
     private static func performSyncDown(
         in context: ModelContext,
         defaults: UserDefaults
-    ) async throws -> FolderSyncResult {
+    ) async throws -> (FolderSyncResult, [KudosBackupWork]) {
         var result = FolderSyncResult()
+        var originalRetryRecords: [KudosBackupWork] = []
         let folderURL = try resolveFolder(defaults: defaults)
         try await withFolderAccess(folderURL) {
             result.absorb(await foldLegacyPackageIfPresent(
@@ -381,16 +384,13 @@ enum FolderSyncService {
             result.didReadRemoteFile = true
             let missingMainAssets = assets.missingAssetCount
             result.pendingOriginalIDs.formUnion(assets.pendingOriginalIDs)
-            do {
-                let contents = KudosBackupContents(
-                    manifest: manifest,
-                    epubFiles: assets.epubFiles,
-                    fontFiles: assets.fontFiles,
-                    originalFiles: assets.originalFiles
-                )
-                let summary = try KudosBackupService.restore(contents, into: context, defaults: defaults, fromSync: true)
-                result.absorb(summary)
-            }
+            result.absorb(try KudosBackupService.restore(
+                KudosBackupContents(
+                    manifest: manifest, epubFiles: assets.epubFiles,
+                    fontFiles: assets.fontFiles, originalFiles: assets.originalFiles
+                ),
+                into: context, defaults: defaults, fromSync: true
+            ))
             assets.epubFiles.removeAll(keepingCapacity: false)
             assets.fontFiles.removeAll(keepingCapacity: false)
             assets.originalFiles.removeAll(keepingCapacity: false)
@@ -420,19 +420,24 @@ enum FolderSyncService {
             )
             result.absorb(conflictFold.result)
             let missingAssetCount = missingMainAssets + conflictFold.missingAssetCount
-            let hasPendingAssets = missingAssetCount > 0 || result.hasPendingOriginals
-            defaults.set(hasPendingAssets, forKey: pendingRemoteAssetsKey)
-            if !hasPendingAssets, let remoteStamp {
+            let unavailable = result.unavailableOriginalIDs
+            originalRetryRecords = manifest.works.filter { unavailable.contains($0.id) }
+            defaults.set(missingAssetCount > 0 || !unavailable.isEmpty, forKey: pendingRemoteAssetsKey)
+            // A pending original still needs retry, but the read manifest can
+            // safely guide pruning once the original's work ID is carried forward.
+            if missingAssetCount == 0, let remoteStamp {
                 defaults.set(remoteStamp, forKey: lastRestoredRemoteStampKey)
             } else {
                 defaults.removeObject(forKey: lastRestoredRemoteStampKey)
             }
         }
-        return result
+        return (result, originalRetryRecords)
     }
 
     private static func performSyncUp(
         in context: ModelContext,
+        excludingOriginalIDs: Set<UUID>,
+        originalRetryRecords: [KudosBackupWork],
         defaults: UserDefaults
     ) async throws -> FolderSyncResult {
         var result = FolderSyncResult()
@@ -443,7 +448,10 @@ enum FolderSyncService {
         let hadPendingChanges = defaults.bool(forKey: dirtyFlagKey)
         defaults.set(false, forKey: dirtyFlagKey)
         do {
-            let contents = try makeLocalContents(in: context, defaults: defaults)
+            let contents = try makeLocalContents(
+                in: context, excludingOriginalIDs: excludingOriginalIDs,
+                originalRetryRecords: originalRetryRecords, defaults: defaults
+            )
             try await withFolderAccess(folderURL) {
                 let syncDirectoryURL = folderURL.appendingPathComponent(
                     syncDirectoryName,
@@ -495,10 +503,8 @@ enum FolderSyncService {
                 result.didWriteRemoteFile = true
                 result.omittedOriginalTitles = (contents.omittedOriginalTitles + writeOmissions).sorted()
                 if !result.omittedOriginalTitles.isEmpty { markDirty(defaults: defaults) }
-                // Stamp our own manifest write so the next sync-down doesn't fully
-                // re-restore it — unless a previous sync-down still has asset
-                // fetches outstanding, in which case the stamp stays withheld so
-                // those fetches retry.
+                // Stamp our own manifest write so the next sync-down can skip it
+                // once all asset fetches finish.
                 if writeOmissions.isEmpty, !defaults.bool(forKey: pendingRemoteAssetsKey),
                    let stamp = try? manifestURL.resourceValues(forKeys: [.contentModificationDateKey])
                        .contentModificationDate {
@@ -516,10 +522,29 @@ enum FolderSyncService {
 
     private static func makeLocalContents(
         in context: ModelContext,
+        excludingOriginalIDs: Set<UUID>,
+        originalRetryRecords: [KudosBackupWork],
         defaults: UserDefaults
     ) throws -> KudosBackupContents {
-        try KudosBackupService.makeContents(
-            works: context.fetch(FetchDescriptor<SavedWork>()),
+        let works = try context.fetch(FetchDescriptor<SavedWork>())
+        var heldBackIDs = excludingOriginalIDs
+        var retainedRecords: [KudosBackupWork] = []
+        if !originalRetryRecords.isEmpty {
+            let localIDs = Set(works.map(\.id))
+            let identity = WorkIdentityIndex(works)
+            // A merged work can have a different local UUID. Keep the shared
+            // UUID listed until its original can be restored and uploaded under
+            // the local UUID. The next download finds originals via the manifest.
+            for archived in originalRetryRecords where !localIDs.contains(archived.id) {
+                guard let local = identity.existingWork(
+                    ao3WorkID: archived.ao3WorkID, sourceURL: archived.sourceURL, recordID: archived.id
+                ) else { continue }
+                heldBackIDs.insert(local.id)
+                retainedRecords.append(archived)
+            }
+        }
+        return try KudosBackupService.makeContents(
+            works: works,
             bookmarks: context.fetch(FetchDescriptor<Bookmark>()),
             fonts: context.fetch(FetchDescriptor<CustomFont>()),
             collections: context.fetch(FetchDescriptor<WorkCollection>()),
@@ -532,6 +557,8 @@ enum FolderSyncService {
             followedTags: (try? context.fetch(FetchDescriptor<FollowedTag>())) ?? [],
             tagAliases: (try? context.fetch(FetchDescriptor<TagAlias>())) ?? [],
             tombstones: context.fetch(FetchDescriptor<SyncTombstone>()),
+            excludingOriginalIDs: heldBackIDs,
+            additionalWorkRecords: retainedRecords,
             defaults: defaults
         )
     }
@@ -1089,8 +1116,8 @@ nonisolated private func writeSyncDirectoryContents(
             in: worksDirectory,
             keeping: Set(contents.manifest.works.map { "\($0.id.uuidString).epub" })
         )
-        // Originals are named `<workID>.<ext>` and `<workID>.conversion.json`,
-        // so they are kept or dropped by the work rather than by an exact name.
+        // Keep both files for every listed work, including originals held back
+        // from this upload while a download or restore is pending.
         if contents.omittedOriginalTitles.isEmpty, omittedOriginals.isEmpty {
             removeOrphanedOriginals(
                 in: originalsDirectory,
@@ -1147,6 +1174,8 @@ nonisolated private func writeSyncOriginal(
         try? JSONDecoder().decode(WorkConversionRecord.self, from: $0)
     }
     let record = recordData.flatMap { try? JSONDecoder().decode(WorkConversionRecord.self, from: $0) }
+    // The folder's copy can advance between the download and this write.
+    if let previousRecord, let record, previousRecord.convertedAt > record.convertedAt { return }
     let previousName = previous?.documentName(for: id, record: previousRecord)
     if let previous, previousName == nil, !previous.documents.isEmpty {
         throw FolderSyncError.unreadableSyncFile

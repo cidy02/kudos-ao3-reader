@@ -3389,6 +3389,8 @@ enum KudosBackupService {
         followedTags: [FollowedTag] = [],
         tagAliases: [TagAlias] = [],
         tombstones: [SyncTombstone] = [],
+        excludingOriginalIDs: Set<UUID> = [],
+        additionalWorkRecords: [KudosBackupWork] = [],
         defaults: UserDefaults = .standard
     ) throws -> KudosBackupContents {
         var epubFiles: [UUID: Data] = [:]
@@ -3413,7 +3415,7 @@ enum KudosBackupService {
             .compactMap(KudosBackupReadingQueueMembership.init)
         var originalFiles: [String: Data] = [:]
         var omittedOriginalTitles: [String] = []
-        for source in originalExportSources(for: works) {
+        for source in originalExportSources(for: works.filter { !excludingOriginalIDs.contains($0.id) }) {
             guard let original = source.original,
                   (try? original.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
                   let data = try? Data(contentsOf: original, options: .mappedIfSafe)
@@ -3428,7 +3430,7 @@ enum KudosBackupService {
         }
 
         var manifest = KudosBackupManifest(
-            works: works.map(KudosBackupWork.init),
+            works: works.map(KudosBackupWork.init) + additionalWorkRecords,
             bookmarks: bookmarks.map(KudosBackupBookmark.init),
             fonts: fonts.map(KudosBackupFont.init),
             collections: collections.map(KudosBackupCollection.init),
