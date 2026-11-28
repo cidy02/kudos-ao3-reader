@@ -90,94 +90,182 @@ struct InsightsStoppedSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    if let rawFandom = work.workFandoms.first, !rawFandom.isEmpty {
-                        Text(discreetMode ? discreetMasker.fandom(rawFandom) : rawFandom)
-                            .font(.caption)
-                            .foregroundStyle(.secondaryInk)
-                    }
-                    Text(discreetMode ? discreetMasker.work(id: work.id, title: work.title) : work.title)
-                        .font(.headline)
-                    let progressLine = Self.progressSummary(for: work, discreetMode: discreetMode)
-                    if !progressLine.isEmpty {
-                        Text(progressLine)
-                            .font(.footnote)
-                            .foregroundStyle(.secondaryInk)
-                    }
-                }
-                .appThemedRows()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    workSummaryCard
 
-                Section("Reason") {
+                    sectionHeading("Reason")
+                        .padding(.top, 10)
+
                     FlowLayout(spacing: 8, rowSpacing: 8) {
                         ForEach(reasons) { choice in
-                            Button(choice.label) { draft.reason = choice.id }
-                                .buttonStyle(.bordered)
-                                .tint(draft.reason == choice.id ? theme.effectiveTint : .secondary)
-                                .accessibilityAddTraits(draft.reason == choice.id ? .isSelected : [])
-                        }
-                    }
-                }
-                .appThemedRows()
-
-                if !availableTags.isEmpty {
-                    Section("Which Tag") {
-                        FlowLayout(spacing: 8, rowSpacing: 8) {
-                            ForEach(availableTags, id: \.self) { choice in
-                                Button(discreetMode ? discreetMasker.tag(choice) : choice) {
-                                    draft.tag = draft.tag == choice ? "" : choice
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(draft.tag == choice ? theme.effectiveTint : .secondary)
-                                .accessibilityAddTraits(draft.tag == choice ? .isSelected : [])
+                            let isSelected = draft.reason == choice.id
+                            Button {
+                                draft.reason = choice.id
+                            } label: {
+                                Text(choice.label)
+                                    .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                                    .foregroundStyle(
+                                        isSelected
+                                            ? ThemeManager.label(on: theme.effectiveTint)
+                                            : Color.primary
+                                    )
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 7)
+                                    .frame(minHeight: 34)
+                                    .background(isSelected ? theme.effectiveTint : theme.appTheme.cardSurface)
+                                    .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
+                                    .overlay(
+                                        SubjectMetrics.controlShape(dynamicTypeSize)
+                                            .strokeBorder(
+                                                isSelected ? Color.clear : theme.appTheme.cardBorder,
+                                                lineWidth: 0.5
+                                            )
+                                    )
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(choice.label)
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
                         }
                     }
-                    .appThemedRows()
-                }
+                    .padding(.horizontal, 2)
 
-                Section("Private Note") {
-                    TextField("Optional note", text: $draft.note, axis: .vertical)
-                        .lineLimit(2...5)
-                }
-                .appThemedRows()
+                    sectionHeading(availableTags.isEmpty ? "Private Note" : "Which Tag")
+                        .padding(.top, 10)
 
-                Section {
-                    Button("Mark as Stopped") {
-                        saveStatus {
-                            try WorkLifecycle.recordStopped(
-                                work,
-                                reason: draft.reason,
-                                tag: draft.tag,
-                                note: draft.note,
-                                in: context
-                            )
+                    VStack(alignment: .leading, spacing: 0) {
+                        if !availableTags.isEmpty {
+                            FlowLayout(spacing: 8, rowSpacing: 8) {
+                                ForEach(availableTags, id: \.self) { choice in
+                                    let isSelected = draft.tag == choice
+                                    let label = discreetMode ? discreetMasker.tag(choice) : choice
+                                    Button {
+                                        draft.tag = isSelected ? "" : choice
+                                    } label: {
+                                        Text(label)
+                                            .font(.subheadline)
+                                            .foregroundStyle(isSelected ? theme.accentInk : Color.primary)
+                                            .padding(.horizontal, 11)
+                                            .padding(.vertical, 5)
+                                            .frame(minHeight: 30)
+                                            .background(
+                                                isSelected
+                                                    ? theme.accentInk.opacity(theme.appTheme.isDarkFamily ? 0.22 : 0.12)
+                                                    : Color.primary.opacity(0.06)
+                                            )
+                                            .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
+                                            .overlay(
+                                                SubjectMetrics.controlShape(dynamicTypeSize)
+                                                    .strokeBorder(
+                                                        isSelected ? theme.accentInk : Color.clear,
+                                                        lineWidth: 1.5
+                                                    )
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(label)
+                                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 12)
+                            .padding(.horizontal, SubjectMetrics.gutter)
+
+                            Divider()
+                                .overlay(theme.appTheme.cardBorder)
                         }
-                    }
-                    .fontWeight(.semibold)
-                    Button("Put On Hold Instead") {
-                        saveStatus {
-                            try WorkLifecycle.setReadingStatus(.onHold, for: work, in: context)
+
+                        HStack(alignment: .center, spacing: 10) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 17))
+                                .foregroundStyle(.secondaryInk)
+                                .frame(width: 22)
+                                .accessibilityHidden(true)
+
+                            TextField("Private Note", text: $draft.note, axis: .vertical)
+                                .font(.callout)
+                                .lineLimit(1...5)
+                                .accessibilityLabel("Private Note")
                         }
+                        .padding(.horizontal, SubjectMetrics.gutter)
+                        .padding(.vertical, 11)
+                        .frame(minHeight: 46)
                     }
+                    .background(theme.appTheme.cardSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                            .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+                    )
+
+                    VStack(spacing: 8) {
+                        Button {
+                            saveStatus {
+                                try WorkLifecycle.recordStopped(
+                                    work,
+                                    reason: draft.reason,
+                                    tag: draft.tag,
+                                    note: draft.note,
+                                    in: context
+                                )
+                            }
+                        } label: {
+                            Text("Mark as Stopped")
+                                .font(.headline)
+                                .foregroundStyle(ThemeManager.label(on: theme.effectiveTint))
+                                .frame(maxWidth: .infinity)
+                                .frame(minHeight: 50)
+                                .padding(.horizontal, 16)
+                                .background(theme.effectiveTint)
+                                .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            saveStatus {
+                                try WorkLifecycle.setReadingStatus(.onHold, for: work, in: context)
+                            }
+                        } label: {
+                            Text("Put On Hold Instead")
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                                .frame(maxWidth: .infinity)
+                                .frame(minHeight: 50)
+                                .padding(.horizontal, 16)
+                                .background(Color.primary.opacity(0.08))
+                                .clipShape(SubjectMetrics.controlShape(dynamicTypeSize))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 14)
                 }
-                .appThemedRows()
+                .padding(.horizontal, SubjectMetrics.gutter)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
-            #if os(macOS)
-            .formStyle(.grouped)
-            #endif
             .appThemedScroll()
+            .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
             .navigationTitle("Stopped Reading?")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .wrappingInlineTitle("Stopped Reading?", isActive: dynamicTypeSize.isAccessibilitySize)
-            .toolbar { ToolbarItem(placement: .cancellationAction) {
-                Button("Close") { dismiss() }
-            } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    ToolbarIconButton(
+                        title: "Close",
+                        systemImage: "xmark",
+                        tint: .primary
+                    ) {
+                        dismiss()
+                    }
+                    .labelStyle(.iconOnly)
+                }
+            }
         }
         #if os(iOS)
         .modifier(ScopeSurfaceAccent())
+        .presentationDragIndicator(.visible)
         #endif
         .alert("Couldn’t Save Reading Status", isPresented: Binding(
             get: { saveError != nil },
@@ -187,6 +275,52 @@ struct InsightsStoppedSheet: View {
         } message: {
             Text(saveError ?? "")
         }
+    }
+
+    private var workSummaryCard: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            if let rawFandom = work.workFandoms.first, !rawFandom.isEmpty {
+                let hue = CoverArt.workHue(fandoms: [rawFandom], title: "")
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(theme.appTheme.subjectPalette(hue: hue).accent)
+                        .frame(width: 8, height: 8)
+                        .accessibilityHidden(true)
+                    Text(discreetMode ? discreetMasker.fandom(rawFandom) : rawFandom)
+                        .font(.caption)
+                        .foregroundStyle(.secondaryInk)
+                }
+            }
+            Text(discreetMode ? discreetMasker.work(id: work.id, title: work.title) : work.title)
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+            let progressLine = Self.progressSummary(for: work, discreetMode: discreetMode)
+            if !progressLine.isEmpty {
+                Text(progressLine)
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 12)
+        .padding(.horizontal, SubjectMetrics.gutter)
+        .background(theme.appTheme.cardSurface)
+        .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+                .strokeBorder(theme.appTheme.cardBorder, lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private func sectionHeading(_ title: String) -> some View {
+        Text(title)
+            .font(.footnote)
+            .foregroundStyle(.secondaryInk)
+            .padding(.horizontal, SubjectMetrics.gutter)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func saveStatus(_ commit: () throws -> Void) {
@@ -297,10 +431,14 @@ struct InsightsOptionsSheet: View {
             .wrappingInlineTitle("Insights Options", isActive: dynamicTypeSize.isAccessibilitySize)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                    ToolbarIconButton(
+                        title: "Close",
+                        systemImage: "xmark",
+                        tint: .primary
+                    ) {
                         dismiss()
                     }
-                    .foregroundStyle(theme.accentInk)
+                    .labelStyle(.iconOnly)
                 }
             }
             .onAppear {
@@ -384,6 +522,7 @@ struct InsightsOptionsSheet: View {
         }
         #if os(iOS)
         .modifier(ScopeSurfaceAccent())
+        .presentationDragIndicator(.visible)
         #endif
     }
 
@@ -410,6 +549,7 @@ struct InsightsOptionsSheet: View {
             .accentFill()
         } header: {
             Text("Privacy")
+                .textCase(nil)
         } footer: {
             Text("Discreet Mode hides fandom, relationship, character and tag names here and in exports. Totals stay.")
         }
@@ -431,6 +571,7 @@ struct InsightsOptionsSheet: View {
             .accessibilityHint("Counts hidden mature works in every figure and export until Mature is hidden again")
         } header: {
             Text("Hidden")
+                .textCase(nil)
         } footer: {
             Text("Counts hidden mature works in every figure and export. Turns off when Mature is hidden again.")
         }
@@ -514,6 +655,7 @@ struct InsightsOptionsSheet: View {
             .accessibilityValue("\(excludedCount) excluded")
         } header: {
             Text("What Counts")
+                .textCase(nil)
         } footer: {
             Text(
                 "Kudos asks after \(untouchedDurationText) without opening a work "
@@ -554,6 +696,7 @@ struct InsightsOptionsSheet: View {
             .accessibilityHint("Deletes your local reading log while keeping works, progress and statuses")
         } header: {
             Text("Reading History")
+                .textCase(nil)
         } footer: {
             Text(
                 "Export saves sessions, statuses and reasons as CSV or JSON. "
@@ -580,9 +723,12 @@ struct InsightsOptionsSheet: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("How Reading Insights Are Counted")
             .accessibilityAddTraits(.isButton)
         }
         .appThemedRows()
@@ -686,91 +832,138 @@ struct InsightsOptionsSheet: View {
 ///
 /// Plain-English explanation of metric rules, calculations, and local privacy.
 struct HowInsightsAreCountedSheet: View {
+    nonisolated struct MetricRuleSection: Equatable, Sendable, Identifiable {
+        var id: String { title }
+        let title: String
+        let symbol: String
+        let paragraphs: [String]
+    }
+
+    nonisolated static let sheetTitle = "How Reading Insights Are Counted"
+
+    nonisolated static let sections: [MetricRuleSection] = [
+        MetricRuleSection(
+            title: "Device-Only Privacy",
+            symbol: "lock.shield",
+            paragraphs: [
+                "Reading Insights are computed entirely on your device from your local reading log.",
+                "Nothing about what you read, when you read, or how fast you read is ever uploaded or sent anywhere."
+            ]
+        ),
+        MetricRuleSection(
+            title: "Shared Rules",
+            symbol: "checklist",
+            paragraphs: [
+                "A period is the dates on screen. Sittings under 15 seconds never count, and visits under 5 minutes apart are joined as one sitting for typical sitting length.",
+                "A reading day runs 4:00 to 4:00 in the time zone the sitting was read in, so a late night past midnight stays one day and one streak.",
+                "A period is compared with the same number of days of the one before. Rereads count unless the option is off, Read Aloud counts as time and never as pace, and excluded fandoms, tags and works are left out of everything."
+            ]
+        ),
+        MetricRuleSection(
+            title: "Overview",
+            symbol: "chart.bar.xaxis",
+            paragraphs: [
+                "Words read: Each sitting’s advance through a work in words (never below zero), using per-chapter EPUB word counts when available and falling back to progress × AO3 word count.",
+                "Novels’ worth: Words read divided by 70,000, rounded to the nearest half. Hidden under 35,000 words.",
+                "Where the Words Went: Words read by each work’s first-listed fandom so the shares add up to the total (top 4, then the rest folded together).",
+                "Reading and Listening: Time split by reading mode, with Read Aloud’s weighted playback rate and works listened to.",
+                "Typical sitting and Pace: Typical sitting is the median sitting duration. Pace is reading-mode words divided by reading-mode time (Read Aloud is left out); character-counted languages get their own pace in characters an hour beside it.",
+                "Length of What You Read: Works with a sitting in the period by AO3 word count: under 5k, 5k–50k, 50k–150k, and 150k+."
+            ]
+        ),
+        MetricRuleSection(
+            title: "Taste",
+            symbol: "sparkles",
+            paragraphs: [
+                "Your Usual Fic: The most common status, rating, category, length band, first fandom, top relationship and top two tags among works read in the period, weighted by the By Words / By Works toggle. A field is named only when its top value covers at least 40%; needs at least 5 works.",
+                "Relationships and Ship Concentration: “/” is romantic and “&” is platonic. Ship Concentration shows the share of a fandom’s words on its top relationship for fandoms with at least 4 works.",
+                "Tags and Often Together: Freeform tags merge learned AO3 canonical names. Often Together lists tag pairs on at least 3 works that appear together at least 1.5 times as often as chance.",
+                "Rating, Status, Category and Warnings: Works read using AO3’s labels. A work with several categories or warnings counts in each, so those two can add up to more than works read.",
+                "When They Were Posted, Crossovers and Languages: Posting year from AO3’s published date with median year; crossovers resolve distinct fandoms."
+            ]
+        ),
+        MetricRuleSection(
+            title: "Habits",
+            symbol: "clock.arrow.circlepath",
+            paragraphs: [
+                "Time of Day: Each sitting’s reading time spread across the local hours it covered, highlighting late-night reading between 1:00 and 5:00.",
+                "Reading Days: Calendar shaded in four steps using the quartiles of your reading days over the last 12 months (or fixed steps under 20 reading days).",
+                "Sittings: Distribution by length (< 10 m, 10–30 m, 30–60 m, 1–2 h, 2 h +), typical sitting, average chapters entered per sitting, and share ending at a chapter end. Skimmed and Peeked at the Ending appear after 20 measured chapters of pace history.",
+                "From Saved to Finished: Median days from saved to first sitting (works first opened in the period) and from first sitting to first finish (complete works finished in the period).",
+                "Rereads, Fandom Timeline and Stopped Reading: Rereads show share of reading time on already-finished works and top works by finishing sittings. Fandom Timeline leaves months under 5,000 words blank. Stopped Reading lists tags carried by at least 5 opened works at twice your overall stopped share."
+            ]
+        ),
+        MetricRuleSection(
+            title: "Library",
+            symbol: "books.vertical",
+            paragraphs: [
+                "Unread and Added vs Read: Never-opened saved works (not deleted or stopped). Months to clear divides unread words by your daily pace over the last 90 days (shown as a range from 7 reading days, and one figure from 30).",
+                "Where Everything Stands: Every library work lands in exactly one status, checked in order: Stopped, On Hold, Letting Chapters Stack, Finished, Caught Up, Reading, and Saved for Later.",
+                "Still reading?: Asks about a work partway through with unread posted chapters after your untouched threshold. A work is never marked stopped by itself.",
+                "Works in Progress and No Longer on AO3: WIPs are grouped as Active (within 6 months), Quiet (6–12 months), or Dormant (over a year). No Longer on AO3 counts confirmed last-copy and gone works only.",
+                "On Finished Works, Series and Authors: Kudos left is a lower bound (browser kudos are unseen until refreshed). Series uses fetched AO3 series part counts. Authors counts AO3 author accounts, not pseuds, and leaves out orphan_account and anonymous works.",
+                "How Finished Works Arrived and Found Early: Tracks where finished works came from (with each source’s finish rate) and finished works saved with under 500 kudos whose kudos have at least tripled since recording began."
+            ]
+        )
+    ]
+
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(ThemeManager.self) private var theme
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    metricSection(
-                        title: "Device-Only Privacy",
-                        symbol: "lock.shield",
-                        paragraphs: [
-                            "Reading Insights are computed entirely on your device from your local reading log.",
-                            "Nothing about what you read, when you read, or how fast you read is ever uploaded or sent anywhere."
-                        ]
-                    )
-
-                    metricSection(
-                        title: "Overview",
-                        symbol: "chart.bar.xaxis",
-                        paragraphs: [
-                            "Words read: The sum of words read across your sittings in the period, based on your movement through each work and its AO3 word count.",
-                            "Novels’ worth: Words read divided by 70,000, rounded to the nearest half novel. Shown when you have read at least 35,000 words.",
-                            "Pace: Weighted words per hour across your active reading sessions. Sittings under 15 seconds are excluded so brief opens do not dilute your speed.",
-                            "Longest streak: The longest run of consecutive calendar days with at least one recorded reading session."
-                        ]
-                    )
-
-                    metricSection(
-                        title: "Taste",
-                        symbol: "sparkles",
-                        paragraphs: [
-                            "Your Usual Fic: Derived from your most frequent fandom, rating, category, and length among works read.",
-                            "Fandoms & Ships: Attributed to each work's primary fandom and tagged relationships. Romantic (/) and platonic (&) bonds are distinguished.",
-                            "Ship concentration: The share of a fandom’s words centered on its top relationship tag."
-                        ]
-                    )
-
-                    metricSection(
-                        title: "Habits",
-                        symbol: "clock.arrow.circlepath",
-                        paragraphs: [
-                            "Time of Day: Tracks the local hours when your reading takes place, highlighting late-night reading between 1:00 AM and 5:00 AM.",
-                            "Reading Days: A calendar heat map indicating days with reading activity in four color tiers based on words read.",
-                            "Sittings: The median duration of your reading stretches, ignoring background pauses."
-                        ]
-                    )
-
-                    metricSection(
-                        title: "Library",
-                        symbol: "books.vertical",
-                        paragraphs: [
-                            "Statuses: Every work in your library is partitioned into exactly one status: Reading, Caught Up, Letting Chapters Stack, On Hold, Saved for Later, Finished, or Stopped.",
-                            "Works in Progress: Categorized as Active (updated in the last 6 months), Quiet (6 to 12 months), or Dormant (over a year).",
-                            "No Longer on AO3: Identifies works you downloaded whose original AO3 pages are no longer available, safely preserved on your device."
-                        ]
-                    )
+                VStack(alignment: .leading, spacing: CardListMetrics.interCardSpacing) {
+                    ForEach(Self.sections) { section in
+                        metricSection(
+                            title: section.title,
+                            symbol: section.symbol,
+                            paragraphs: section.paragraphs
+                        )
+                    }
                 }
-                .padding(16)
+                .padding(SubjectMetrics.gutter)
             }
-            .background(theme.appTheme.cardBackdrop)
-            .navigationTitle("How Insights Are Counted")
+            .appThemedScroll()
+            .background(theme.appTheme.cardBackdrop.ignoresSafeArea())
+            .navigationTitle(Self.sheetTitle)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            .wrappingInlineTitle(Self.sheetTitle, isActive: dynamicTypeSize.isAccessibilitySize)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
+                    ToolbarIconButton(
+                        title: "Close",
+                        systemImage: "xmark",
+                        tint: .primary
+                    ) {
                         dismiss()
                     }
-                    .foregroundStyle(theme.effectiveTint)
+                    .labelStyle(.iconOnly)
                 }
             }
         }
+        #if os(iOS)
+        .modifier(ScopeSurfaceAccent())
+        .presentationDragIndicator(.visible)
+        #endif
     }
 
     private func metricSection(title: String, symbol: String, paragraphs: [String]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: symbol)
-                    .foregroundStyle(theme.effectiveTint)
+                    .foregroundStyle(theme.accentInk)
                     .font(.headline)
+                    .accessibilityHidden(true)
                 Text(title)
                     .font(.headline)
                     .foregroundStyle(.primary)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
 
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(paragraphs, id: \.self) { paragraph in
@@ -782,7 +975,8 @@ struct HowInsightsAreCountedSheet: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(.vertical, 14)
+        .padding(.horizontal, SubjectMetrics.gutter)
         .background(theme.appTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous))
         .overlay(

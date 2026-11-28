@@ -307,7 +307,7 @@ private struct WaitingDayHeader: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.headline)
+                .font(.title3.bold())
                 .foregroundStyle(.primary)
             Text("\(count)")
                 .font(.caption.bold())
@@ -430,47 +430,11 @@ struct WaitingRow: View {
     }
 
     private var whatChanged: String {
-        if case let .tag(tag) = update.source {
-            if tag.isBusy {
-                return update.workTitle.isEmpty
-                    ? "and more — open tag on AO3"
-                    : "\u{201C}\(update.workTitle)\u{201D} and more"
-            }
-            if tag.count > 1 {
-                let extra = tag.count - 1
-                return update.workTitle.isEmpty
-                    ? "\(tag.count) new works in \(tag.name)"
-                    : "\u{201C}\(update.workTitle)\u{201D} and \(extra) more"
-            }
-            return "New work in \(tag.name)"
-        }
-        guard isConfirmed else {
-            // "This work updated" asserts the work, which is the one thing an
-            // author or series notification does not pin — see `pinsTheWork`.
-            return update.pinsTheWork
-                ? "This work updated. Open it to see what changed."
-                : "Something new from this follow. Open it on AO3 to see what."
-        }
-        switch update.change {
-        case .newChapter: return chapter.map { "Chapter \($0) posted" } ?? "A new chapter was posted"
-        case .newWork: return "A new work was posted"
-        case .unknown: return "This work updated."
-        }
+        WaitingRowBoardCopy.whatChanged(for: update, chapter: chapter)
     }
 
     private var badge: String {
-        if case let .tag(tag) = update.source {
-            if tag.isBusy {
-                return "\(max(tag.count, FollowedTagFeedEvaluator.maxFeedEntries))+"
-            }
-            return tag.count > 1 ? "+\(tag.count)" : "New"
-        }
-        guard isConfirmed else { return update.pinsTheWork ? "Updated" : "Check" }
-        switch update.change {
-        case .newChapter: return chapter.map { "+1 · Ch. \($0)" } ?? "Updated"
-        case .newWork: return "New"
-        case .unknown: return "Updated"
-        }
+        WaitingRowBoardCopy.badge(for: update, chapter: chapter)
     }
 
     /// The 40pt gutter cannot scale — widening it with the text would leave the
@@ -524,6 +488,14 @@ struct WaitingRow: View {
         .accessibilityLabel(update.at.formatted(.dateTime.hour().minute()))
     }
 
+    private var sourceLineText: String {
+        WaitingRowBoardCopy.sourceLine(for: update)
+    }
+
+    private var showsAuthorInMetadata: Bool {
+        WaitingRowBoardCopy.showsAuthorInMetadata(for: update)
+    }
+
     private var sourceLine: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(update.source.kind)
@@ -533,8 +505,8 @@ struct WaitingRow: View {
                 .padding(.vertical, 4)
                 .background(update.source.color, in: Capsule())
             Text(isAccessibilitySize
-                ? AccessibilitySoftBreak.opportunities(in: update.source.line)
-                : update.source.line)
+                ? AccessibilitySoftBreak.opportunities(in: sourceLineText)
+                : sourceLineText)
                 .font(.caption)
                 .foregroundStyle(.secondaryInk)
                 .multilineTextAlignment(.leading)
@@ -573,12 +545,12 @@ struct WaitingRow: View {
         }
     }
 
-    /// Nothing here for a row whose byline could not be read and whose gutter
-    /// value is still in the gutter.
+    /// Nothing here when the byline is already carried in the source line (or absent)
+    /// and the gutter value is still in the gutter.
     @ViewBuilder private var metadata: some View {
-        if !update.author.isEmpty || showsValueInStrip {
+        if showsAuthorInMetadata || showsValueInStrip {
             FlowLayout(spacing: 12, rowSpacing: 4) {
-                if !update.author.isEmpty {
+                if showsAuthorInMetadata {
                     // Truncating: a pseud is free text, unlike the bounded stats
                     // this label usually carries.
                     WorkStatLabel(text: update.author, symbol: "person", truncates: true)
@@ -696,6 +668,108 @@ private struct WaitingRail: View {
     }
 }
 
+/// Pure board-copy formatting for `WaitingRow` (`Subscriptions.dc.html`), preserving
+/// `SubscriptionUpdate`'s confirmed-vs-unpinned honesty boundaries.
+enum WaitingRowBoardCopy {
+    static func sourceLine(for update: SubscriptionUpdate) -> String {
+        switch update.source {
+        case .work:
+            return update.author.isEmpty ? "Following this work" : update.author
+        case let .series(name):
+            return update.author.isEmpty ? name : "\(name) · \(update.author)"
+        case let .author(name):
+            return name
+        case let .tag(tag):
+            return tag.category.map { "\(tag.name) · \($0.lowercased())" } ?? tag.name
+        case .unknown:
+            return "From a subscription"
+        }
+    }
+
+    static func showsAuthorInMetadata(for update: SubscriptionUpdate) -> Bool {
+        guard !update.author.isEmpty else { return false }
+        switch update.source {
+        case .work, .series:
+            return false
+        case let .author(name):
+            return update.author.caseInsensitiveCompare(name) != .orderedSame
+        case .tag, .unknown:
+            return true
+        }
+    }
+
+    static func whatChanged(for update: SubscriptionUpdate, chapter: Int?) -> String {
+        if case let .tag(tag) = update.source {
+            return tagWhatChanged(for: update, tag: tag)
+        }
+        guard update.certainty == .confirmed else {
+            // "This work updated" asserts the work, which is the one thing an
+            // author or series notification does not pin — see `pinsTheWork`.
+            return update.pinsTheWork
+                ? "This work updated. Open it to see what changed."
+                : "Something new from this follow. Open it on AO3 to see what."
+        }
+        switch update.change {
+        case .newChapter:
+            guard let chapter else { return "A new chapter was posted" }
+            // `update.words` is the whole work's count (the crate's `chapter_words` is the
+            // chapter's, and isn't carried), so it must not read as the chapter's length.
+            if let words = update.words, words > 0 {
+                return "Chapter \(chapter) · \(words.formatted()) words total"
+            }
+            return "Chapter \(chapter) posted"
+        case .newWork:
+            return newWorkDetail(for: update, fallback: "A new work was posted")
+        case .unknown:
+            return "This work updated."
+        }
+    }
+
+    private static func tagWhatChanged(
+        for update: SubscriptionUpdate,
+        tag: SubscriptionUpdate.FollowedTagUpdateSource
+    ) -> String {
+        if tag.isBusy {
+            return update.workTitle.isEmpty
+                ? "and more — open tag on AO3"
+                : "\u{201C}\(update.workTitle)\u{201D} and more"
+        }
+        if tag.count > 1 {
+            let extra = tag.count - 1
+            return update.workTitle.isEmpty
+                ? "\(tag.count) new works in \(tag.name)"
+                : "\u{201C}\(update.workTitle)\u{201D} and \(extra) more"
+        }
+        return newWorkDetail(for: update, fallback: "New work in \(tag.name)")
+    }
+
+    private static func newWorkDetail(for update: SubscriptionUpdate, fallback: String) -> String {
+        var parts = ["New work"]
+        if let fandom = update.fandoms.first, !fandom.isEmpty {
+            parts.append(fandom)
+        }
+        if let words = update.words, words > 0 {
+            parts.append("\(words.formatted()) words")
+        }
+        return parts.count > 1 ? parts.joined(separator: " · ") : fallback
+    }
+
+    static func badge(for update: SubscriptionUpdate, chapter: Int?) -> String {
+        if case let .tag(tag) = update.source {
+            if tag.isBusy {
+                return "\(max(tag.count, FollowedTagFeedEvaluator.maxFeedEntries))+"
+            }
+            return tag.count > 1 ? "\(tag.count)" : "New"
+        }
+        guard update.certainty == .confirmed else { return update.pinsTheWork ? "Updated" : "Check" }
+        switch update.change {
+        case .newChapter: return chapter.map { "+1 · Ch. \($0)" } ?? "Updated"
+        case .newWork: return "New"
+        case .unknown: return "Updated"
+        }
+    }
+}
+
 private extension SubscriptionUpdate.Source {
     var kind: String {
         switch self {
@@ -704,16 +778,6 @@ private extension SubscriptionUpdate.Source {
         case .author: "Author"
         case .tag: "Tag"
         case .unknown: "Update"
-        }
-    }
-
-    var line: String {
-        switch self {
-        case .work: "Following this work"
-        case let .series(name): "Following \(name)"
-        case let .author(name): "Following \(name)"
-        case let .tag(tag): tag.category.map { "\(tag.name) · \($0)" } ?? tag.name
-        case .unknown: "From a subscription"
         }
     }
 

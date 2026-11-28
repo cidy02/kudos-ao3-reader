@@ -169,7 +169,7 @@ struct WorkDetailStatsCard: View {
                         .foregroundStyle(.accentInk)
                 }
                 Text(cell.value)
-                    .font(.system(.headline, design: .rounded))
+                    .font(.system(.headline, design: .rounded, weight: .bold))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
