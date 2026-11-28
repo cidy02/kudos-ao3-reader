@@ -275,6 +275,26 @@ final class ReaderSpeechController {
     var speechErrorMessage: String?
     var sessionTitle: String { nowPlayingTitle }
 
+    var accessoryChapterNumber: Int? {
+        guard let index = chapterIndex(of: resumeLocator),
+              sections.indices.contains(index) else { return nil }
+        return sections[index].storyChapterIndex
+    }
+
+    var accessoryMinutesRemaining: Int? {
+        guard totalPositionCount > 0, let position = resumeLocator?.locations.position else { return nil }
+        let remaining = max(0, totalPositionCount - position)
+        let seconds = Double(remaining) * ReaderTimeEstimate.ttsSecondsPerPosition(
+            rate: ReaderSpeechPreferences.rateMultiplier
+        )
+        guard seconds.isFinite else { return nil }
+        return Int((seconds / 60).rounded())
+    }
+
+    var accessorySubtitle: String? {
+        SystemReadAloudBoardCopy.subtitle(chapter: accessoryChapterNumber, minutes: accessoryMinutesRemaining)
+    }
+
     isolated deinit {
         if let workEPUBChangeObserver {
             NotificationCenter.default.removeObserver(workEPUBChangeObserver)

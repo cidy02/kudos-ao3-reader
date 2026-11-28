@@ -63,9 +63,19 @@ enum QRCodeGenerator {
 enum TrustedDeviceCopy {
     static let thisDeviceDetail = "Signs deletions with its own key"
     static let emptyState = "No other devices paired yet."
+    static let addDevice = "Add a Device…"
+
+    static func showCodeTitle(deviceName: String) -> String {
+        "Show a Code on This \(deviceName)"
+    }
 
     static func thisDeviceTitle(deviceName: String) -> String {
         "This \(deviceName)"
+    }
+
+    static func thisDeviceStatus(lastSyncAt: Date?, now: Date = Date()) -> String {
+        guard let lastSyncAt else { return thisDeviceDetail }
+        return "\(thisDeviceDetail) · synced \(SyncFolderDisplayCopy.relativeSyncAge(from: lastSyncAt, to: now))"
     }
 
     static func thisDeviceSymbol(deviceName: String) -> String {
@@ -82,6 +92,8 @@ enum TrustedDeviceCopy {
 }
 
 struct TombstoneTrustSettingsSection: View {
+    let lastSyncAt: Date?
+
     @Environment(ThemeManager.self) private var themeManager
     @State private var showPairingSheet = false
     @State private var unknownSignerCount = 0
@@ -91,17 +103,14 @@ struct TombstoneTrustSettingsSection: View {
 
     private var thisDeviceRow: some View {
         let deviceName = ThisDevice.name
-        return HStack(spacing: 12) {
-            Image(systemName: TrustedDeviceCopy.thisDeviceSymbol(deviceName: deviceName))
-                .font(.body)
-                .foregroundStyle(.secondaryInk)
-                .frame(width: 22)
-                .accessibilityHidden(true)
+        let detail = TrustedDeviceCopy.thisDeviceStatus(lastSyncAt: lastSyncAt)
+        return HStack(spacing: 10) {
+            SystemSyncDeviceIcon(symbol: TrustedDeviceCopy.thisDeviceSymbol(deviceName: deviceName))
             VStack(alignment: .leading, spacing: 2) {
                 Text(TrustedDeviceCopy.thisDeviceTitle(deviceName: deviceName))
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(TrustedDeviceCopy.thisDeviceDetail)
+                Text(detail)
                     .font(.footnote)
                     .foregroundStyle(.secondaryInk)
                     .fixedSize(horizontal: false, vertical: true)
@@ -110,7 +119,7 @@ struct TombstoneTrustSettingsSection: View {
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(TrustedDeviceCopy.thisDeviceTitle(deviceName: deviceName))
-        .accessibilityValue(TrustedDeviceCopy.thisDeviceDetail)
+        .accessibilityValue(detail)
         .accessibilityAction(named: "Copy Key") {
             copyDeviceKey()
         }
@@ -168,16 +177,16 @@ struct TombstoneTrustSettingsSection: View {
                 showPairingSheet = true
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: "iphone")
+                    Image(systemName: "plus")
                         .font(.body)
                         .foregroundStyle(.accentInk)
                         .frame(width: 22)
                         .accessibilityHidden(true)
-                    Text("Pair a Device…")
+                    Text(TrustedDeviceCopy.addDevice)
                         .foregroundStyle(.accentInk)
                 }
             }
-            .accessibilityLabel("Pair a Device…")
+            .accessibilityLabel(TrustedDeviceCopy.addDevice)
 
             if let statusMessage {
                 Text(statusMessage)
@@ -236,6 +245,21 @@ struct TombstoneTrustSettingsSection: View {
     }
 }
 
+private struct SystemSyncDeviceIcon: View {
+    let symbol: String
+    @Environment(ThemeManager.self) private var themeManager
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(.accentInk)
+            .frame(width: 26, height: 26)
+            .background(themeManager.appTheme.nestedCardSurface, in: RoundedRectangle(cornerRadius: 6))
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+            .accessibilityHidden(true)
+    }
+}
+
 private struct TrustedDeviceRow: View {
     let device: TrustedDevice
     let onRename: (String) -> Void
@@ -281,11 +305,7 @@ private struct TrustedDeviceRow: View {
         VStack(alignment: .leading, spacing: 6) {
             if dynamicTypeSize.isAccessibilitySize {
                 HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "ipad.and.iphone")
-                        .font(.body)
-                        .foregroundStyle(.secondaryInk)
-                        .frame(width: 22)
-                        .accessibilityHidden(true)
+                    SystemSyncDeviceIcon(symbol: "ipad.and.iphone")
                     VStack(alignment: .leading, spacing: 2) {
                         Text(displayName)
                             .fixedSize(horizontal: false, vertical: true)
@@ -300,11 +320,7 @@ private struct TrustedDeviceRow: View {
                 }
             } else {
                 HStack(spacing: 12) {
-                    Image(systemName: "ipad.and.iphone")
-                        .font(.body)
-                        .foregroundStyle(.secondaryInk)
-                        .frame(width: 22)
-                        .accessibilityHidden(true)
+                    SystemSyncDeviceIcon(symbol: "ipad.and.iphone")
                     VStack(alignment: .leading, spacing: 2) {
                         Text(displayName)
                         Text(trustedDetail)
@@ -397,7 +413,7 @@ struct PairingSheet: View {
                     pairingForm
                 }
             }
-            .navigationTitle("Pair a Device")
+            .navigationTitle("Add a Device")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -419,6 +435,7 @@ struct PairingSheet: View {
                 }
             }
         }
+        .presentationDragIndicator(.visible)
         #if os(iOS)
         .sheet(isPresented: $showScanner) {
             QRScannerSheet { scanned in
@@ -429,29 +446,45 @@ struct PairingSheet: View {
         #endif
     }
 
+    private var pairingExplanation: String {
+        #if os(iOS)
+        "Scan another device's code to trust its deletions here, or show your code "
+            + "so it can trust deletions from this device."
+        #else
+        "Show your code so another device can trust deletions from this device."
+        #endif
+    }
+
     private var pairingForm: some View {
         Form {
             // Group so .appThemedRows() reaches every section (not from the Form itself).
             Group {
                 Section {
-                    Text("Scan another device's code to trust its deletions here, or show your code "
-                        + "so it can trust deletions from this device.")
-                        .foregroundStyle(.secondaryInk)
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Sync with another device")
+                                .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
+                            Text(pairingExplanation)
+                                .font(.footnote)
+                                .foregroundStyle(.secondaryInk)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(.accentInk)
+                            .accessibilityHidden(true)
+                    }
                 }
 
                 Section {
-                    #if os(iOS)
-                    Button {
-                        showScanner = true
-                    } label: {
-                        Label("Scan a QR Code", systemImage: "qrcode.viewfinder")
-                    }
-                    #endif
-
                     Button {
                         showQR.toggle()
                     } label: {
-                        Label(showQR ? "Hide My QR Code" : "Show My QR Code", systemImage: "qrcode")
+                        Label(
+                            showQR ? "Hide My QR Code" : TrustedDeviceCopy.showCodeTitle(deviceName: ThisDevice.name),
+                            systemImage: "qrcode"
+                        )
                     }
 
                     if showQR, let image = QRCodeGenerator.image(for: PairingKeyCodec.encode(deviceHex)) {
@@ -463,9 +496,18 @@ struct PairingSheet: View {
                                 .scaledToFit()
                                 .frame(maxWidth: 220, maxHeight: 220)
                                 .padding(.vertical, 4)
+                                .accessibilityLabel("My QR code")
                             Spacer()
                         }
                     }
+
+                    #if os(iOS)
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Label("Scan the Other Device’s Code", systemImage: "qrcode.viewfinder")
+                    }
+                    #endif
 
                     Button {
                         copyKey()
@@ -475,14 +517,18 @@ struct PairingSheet: View {
                 }
 
                 Section {
-                    DisclosureGroup("Advanced: paste a key manually", isExpanded: $showAdvanced) {
+                    DisclosureGroup("Type a Key Instead", isExpanded: $showAdvanced) {
                         TextField("Other device's key", text: $pasteText)
                             .font(.system(.caption, design: .monospaced))
                             #if canImport(UIKit)
                             .textInputAutocapitalization(.never)
                             #endif
                             .autocorrectionDisabled()
-                        Toggle("I got this key from my other device", isOn: $confirmedFromOwnDevice).accentFill()
+                        Toggle(isOn: $confirmedFromOwnDevice) {
+                            Text("I got this key from my own device")
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .accentFill()
                         Button("Trust") {
                             trustPasted()
                         }

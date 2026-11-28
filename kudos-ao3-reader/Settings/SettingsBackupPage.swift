@@ -172,6 +172,7 @@ struct SettingsBackupPage: View {
         .sheet(item: $pendingImport) { pending in
             BackupImportSheet(
                 manifest: pending.manifest,
+                archiveByteCount: pending.identity.isDirectory ? nil : pending.identity.rootFileSize,
                 localWorks: works.filter { !$0.isPendingDeletion },
                 hasReplaceableRecords: hasAnythingReplaceWouldRemove,
                 syncIsConnected: folderSyncStatus.isConnected,

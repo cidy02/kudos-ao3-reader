@@ -30,7 +30,7 @@ struct SettingsSyncFolderPage: View {
                 onShowSyncDetails: { showingSyncDetails = true }
             )
 
-            TombstoneTrustSettingsSection()
+            TombstoneTrustSettingsSection(lastSyncAt: folderSyncStatus.lastSyncAt)
 
             FolderSyncMetadataSection(
                 persistenceStatus: persistenceStatus,
@@ -126,6 +126,14 @@ struct SettingsSyncFolderPage: View {
 enum SyncFolderDisplayCopy {
     static let footerText =
         "Kudos keeps a copy of your library in this folder. Other devices that use the same folder stay in step."
+
+    static func removeDeviceTitle(deviceName: String) -> String {
+        "Remove This \(deviceName) from Sync"
+    }
+
+    static func removeDeviceDetail(deviceName: String) -> String {
+        "Your library stays on this \(deviceName); it just stops syncing."
+    }
 
     static func folderHeading(_ sync: FolderSyncSnapshot) -> String {
         let name = sync.folderDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -307,12 +315,13 @@ struct FolderSyncSettingsSection: View {
                     .foregroundStyle(.red)
                     .frame(width: 22)
                     .accessibilityHidden(true)
-                Text("Disconnect")
+                Text(SyncFolderDisplayCopy.removeDeviceTitle(deviceName: ThisDevice.name))
+                    .fixedSize(horizontal: false, vertical: true)
                     .foregroundStyle(.red)
             }
         }
         .disabled(isSyncing)
-        .accessibilityLabel("Disconnect")
+        .accessibilityLabel(SyncFolderDisplayCopy.removeDeviceTitle(deviceName: ThisDevice.name))
     }
 
     var body: some View {
@@ -347,6 +356,9 @@ struct FolderSyncSettingsSection: View {
             Text("Sync folder")
         } footer: {
             Text(SyncFolderDisplayCopy.footerText)
+            if folderStatus.isConnected {
+                Text(SyncFolderDisplayCopy.removeDeviceDetail(deviceName: ThisDevice.name))
+            }
         }
     }
 }

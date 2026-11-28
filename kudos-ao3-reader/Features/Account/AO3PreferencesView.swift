@@ -93,6 +93,7 @@ struct AO3PreferencesView: View {
                     }
                 }
                 .disabled(isSaving || phase != .ready || !hasEdits)
+                .accessibilityLabel(isSaving ? "Saving preferences" : "Save")
             }
         }
         .sheet(item: $helpSheet) { state in
@@ -112,41 +113,27 @@ struct AO3PreferencesView: View {
     @ViewBuilder
     private func formContent(_ snapshot: AO3PreferencesSnapshot) -> some View {
         List {
-            accountLinksSection
-
-            ForEach(Array(snapshot.sections.enumerated()), id: \.element.id) { sectionIndex, section in
-                Section {
-                    sectionHeader(title: section.title, help: section.help)
-                        .pageBodyRow(top: 18, gutter: gutter)
-                    if !collapsedSectionTitles.contains(section.title) {
-                        VStack(spacing: 0) {
-                            ForEach(Array(section.toggles.enumerated()), id: \.element.id) { toggleIndex, toggle in
-                                if toggleIndex > 0 {
-                                    SubjectRowSeparator()
-                                }
-                                preferenceToggleRow(
-                                    label: toggle.label,
-                                    isOn: bindingToggle(section: sectionIndex, toggle: toggleIndex),
-                                    help: toggle.help
-                                )
-                            }
-                        }
-                        .subjectPanel()
-                        .pageBodyRow(top: 8, gutter: gutter)
-                    }
-                }
+            let sections = Array(snapshot.sections.enumerated())
+            ForEach(sections.filter { $0.element.title == "Display" }, id: \.element.id) { index, section in
+                preferenceSection(section, at: index)
             }
 
             if !snapshot.selects.isEmpty || !snapshot.textFields.isEmpty {
                 Section {
-                    SubjectFieldLabel(text: "Display Options", style: .formGroup)
-                        .pageBodyRow(top: 18, gutter: gutter)
+                    SubjectFieldLabel(text: "Your profile", style: .formGroup)
+                        .pageBodyRow(top: 14, gutter: gutter)
                     VStack(spacing: 0) {
-                        ForEach(Array(snapshot.selects.enumerated()), id: \.element.id) { index, select in
-                            if index > 0 {
+                        let selects = snapshot.selects.enumerated().sorted {
+                            let first = AO3PreferencesBoardCopy.profileOrder($0.element.key)
+                            let second = AO3PreferencesBoardCopy.profileOrder($1.element.key)
+                            return first == second ? $0.offset < $1.offset : first < second
+                        }
+                        ForEach(selects, id: \.element.id) { index, select in
+                            let title = AO3PreferencesBoardCopy.profileTitle(key: select.key, fallback: select.label)
+                            if index != selects.first?.offset {
                                 SubjectRowSeparator()
                             }
-                            SubjectFormRow(label: select.label, arrangement: .value) {
+                            preferenceFormRow(title, icon: AO3PreferencesBoardCopy.symbol(for: title)) {
                                 HStack(alignment: .center, spacing: 8) {
                                     // An empty label, not `.labelsHidden()`: the
                                     // navigation-link style ignores that and drew
@@ -158,7 +145,7 @@ struct AO3PreferencesView: View {
                                     } label: {
                                         EmptyView()
                                     }
-                                    .accessibilityLabel(select.label)
+                                    .accessibilityLabel(title)
                                     #if os(iOS)
                                     .pickerStyle(.navigationLink)
                                     #endif
@@ -173,9 +160,11 @@ struct AO3PreferencesView: View {
                             if !snapshot.selects.isEmpty || index > 0 {
                                 SubjectRowSeparator()
                             }
-                            SubjectFormRow(label: field.label, arrangement: .value) {
+                            let title = AO3PreferencesBoardCopy.profileTitle(key: field.key, fallback: field.label)
+                            preferenceFormRow(title, icon: AO3PreferencesBoardCopy.symbol(for: title)) {
                                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                    TextField(field.label, text: bindingText(index))
+                                    TextField(title, text: bindingText(index))
+                                        .accessibilityLabel(title)
                                         .multilineTextAlignment(.trailing)
                                     #if os(iOS)
                                         .textInputAutocapitalization(.never)
@@ -189,9 +178,19 @@ struct AO3PreferencesView: View {
                         }
                     }
                     .subjectPanel()
-                    .pageBodyRow(top: 8, gutter: gutter)
+                    .pageBodyRow(top: 6, gutter: gutter)
                 }
             }
+
+            ForEach(sections.filter { $0.element.title != "Display" && $0.element.title != "Privacy" },
+                    id: \.element.id) { index, section in
+                preferenceSection(section, at: index)
+            }
+            ForEach(sections.filter { $0.element.title == "Privacy" }, id: \.element.id) { index, section in
+                preferenceSection(section, at: index)
+            }
+
+            accountLinksSection
 
             Section {
                 footnote.pageBodyRow(top: 10, gutter: gutter)
@@ -201,9 +200,46 @@ struct AO3PreferencesView: View {
         .subjectScreenWash(palette: accountPalette)
     }
 
+    private func preferenceSection(_ section: AO3PreferenceSection, at index: Int) -> some View {
+        let title = AO3PreferencesBoardCopy.sectionTitle(section)
+        return Section {
+            sectionHeader(title: title, id: section.id, help: section.help)
+                .pageBodyRow(top: 14, gutter: gutter)
+            if !collapsedSectionTitles.contains(section.id) {
+                VStack(spacing: 0) {
+                    let ordered = section.toggles.enumerated().sorted {
+                        let first = AO3PreferencesBoardCopy.readingOrder($0.element)
+                        let second = AO3PreferencesBoardCopy.readingOrder($1.element)
+                        return first == second ? $0.offset < $1.offset : first < second
+                    }
+                    ForEach(ordered, id: \.element.id) { toggleIndex, toggle in
+                        if toggleIndex != ordered.first?.offset {
+                            SubjectRowSeparator()
+                        }
+                        preferenceToggleRow(
+                            label: AO3PreferencesBoardCopy.toggleTitle(toggle),
+                            key: toggle.key,
+                            isOn: bindingToggle(section: index, toggle: toggleIndex),
+                            help: toggle.help
+                        )
+                    }
+                }
+                .subjectPanel()
+                .pageBodyRow(top: 6, gutter: gutter)
+
+                if title == "Notifications by email" {
+                    Text("These are AO3’s own settings, saved to your AO3 account. Kudos never sends email.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondaryInk)
+                        .pageBodyRow(top: 6, gutter: gutter)
+                }
+            }
+        }
+    }
+
     @ViewBuilder
-    private func sectionHeader(title: String, help: AO3PreferenceHelpRef?) -> some View {
-        let isCollapsed = collapsedSectionTitles.contains(title)
+    private func sectionHeader(title: String, id: String, help: AO3PreferenceHelpRef?) -> some View {
+        let isCollapsed = collapsedSectionTitles.contains(id)
         return HStack(spacing: 8) {
             SubjectFieldLabel(text: title, style: .formGroup)
             Spacer(minLength: 8)
@@ -212,9 +248,9 @@ struct AO3PreferencesView: View {
             }
             Button {
                 if isCollapsed {
-                    collapsedSectionTitles.remove(title)
+                    collapsedSectionTitles.remove(id)
                 } else {
-                    collapsedSectionTitles.insert(title)
+                    collapsedSectionTitles.insert(id)
                 }
             } label: {
                 Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
@@ -230,10 +266,12 @@ struct AO3PreferencesView: View {
     @ViewBuilder
     private func preferenceToggleRow(
         label: String,
+        key: String,
         isOn: Binding<Bool>,
         help: AO3PreferenceHelpRef?
     ) -> some View {
-        SubjectFormRow(label: label, arrangement: .value) {
+        let symbol = AO3PreferencesBoardCopy.symbol(for: label, key: key)
+        preferenceFormRow(label, icon: symbol) {
             HStack(alignment: .center, spacing: 8) {
                 Toggle(label, isOn: isOn)
                     .labelsHidden()
@@ -241,6 +279,26 @@ struct AO3PreferencesView: View {
                 if let help {
                     helpButton(help)
                 }
+            }
+        }
+    }
+
+    private func preferenceFormRow<Control: View>(
+        _ title: String, icon: String?, @ViewBuilder control: @escaping () -> Control
+    ) -> some View {
+        HStack(spacing: 0) {
+            if let icon {
+                Image(systemName: icon)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.accentInk)
+                    .frame(width: 24, height: 24)
+                    .background(themeManager.appTheme.nestedCardSurface, in: RoundedRectangle(cornerRadius: 6))
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .padding(.leading, 14)
+                    .accessibilityHidden(true)
+            }
+            SubjectFormRow(label: title, arrangement: .value) {
+                control()
             }
         }
     }
@@ -652,4 +710,75 @@ extension AO3PreferencesView {
     }
 
     private var gutter: CGFloat { SubjectMetrics.accountGutter }
+}
+
+/// Display labels for known fields. The parsed fields and their original indexes
+/// continue to own every binding, help link and submitted value.
+enum AO3PreferencesBoardCopy {
+    static func sectionTitle(_ section: AO3PreferenceSection) -> String {
+        switch section.title {
+        case "Display": return "Reading on AO3"
+        case "Privacy": return "Privacy on AO3"
+        default:
+            let emailKeys: Set<String> = ["comment_emails_off", "kudos_emails_off"]
+            if !section.toggles.isEmpty && section.toggles.allSatisfy({ emailKeys.contains($0.key) }) {
+                return "Notifications by email"
+            }
+            return section.title
+        }
+    }
+
+    static func toggleTitle(_ toggle: AO3PreferenceToggle) -> String {
+        switch toggle.key {
+        case "adult": "Show adult content without asking"
+        case "hide_warnings": "Hide warnings"
+        case "view_full_works": "Show whole work by default"
+        default: toggle.label == "Hide additional tags." ? "Hide additional tags" : toggle.label
+        }
+    }
+
+    static func readingOrder(_ toggle: AO3PreferenceToggle) -> Int {
+        switch toggleTitle(toggle) {
+        case "Show adult content without asking": 0
+        case "Hide warnings": 1
+        case "Hide additional tags": 2
+        case "Show whole work by default": 3
+        default: 4
+        }
+    }
+
+    static func symbol(for label: String, key: String = "") -> String? {
+        switch label {
+        case "Show adult content without asking": return "eye"
+        case "Hide warnings": return "exclamationmark.triangle"
+        case "Hide additional tags": return "tag"
+        case "Show whole work by default": return "book"
+        case "Time zone": return "globe"
+        case "Skin": return "paintpalette"
+        case "Browser title": return "textformat"
+        default: break
+        }
+        return switch key {
+        case "comment_emails_off": "bubble"
+        case "kudos_emails_off": "heart"
+        default: nil
+        }
+    }
+
+    static func profileTitle(key: String, fallback: String) -> String {
+        switch key {
+        case "time_zone": "Time zone"
+        case "skin_id": "Skin"
+        case "work_title_format": "Browser title"
+        default: fallback
+        }
+    }
+
+    static func profileOrder(_ key: String) -> Int {
+        switch key {
+        case "time_zone": 0
+        case "skin_id": 1
+        default: 2
+        }
+    }
 }

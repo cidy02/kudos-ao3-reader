@@ -574,25 +574,52 @@ struct ContentView: View {
 
     #if os(iOS)
     private var readerSpeechAccessory: some View {
-        HStack(spacing: 6) {
+        let work = speechAccessoryWork
+        let concealed = work.map { privacyGate.isConcealed($0, enabled: hideMature) } ?? false
+        let title = concealed || speech.sessionTitle.isEmpty ? "Reading Aloud" : speech.sessionTitle
+        let subtitle = concealed ? nil : speech.accessorySubtitle
+
+        return HStack(spacing: 6) {
             Button(action: openSpeechReader) {
                 HStack(spacing: 10) {
-                    Image(systemName: "waveform")
-                        .foregroundStyle(.accentInk)
-                    Text(speechAccessoryTitle)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Spacer(minLength: 0)
+                    if let work, !concealed {
+                        GeneratedCoverView(
+                            recipe: work.generatedCoverRecipe, width: 30,
+                            epubURL: work.fileURL, epubWorkID: work.id, height: 40,
+                            showsWords: false, cornerRadius: 6, coverArtPreference: work.coverArtPreferenceRaw
+                        )
+                        .accessibilityHidden(true)
+                    } else {
+                        Image(systemName: "waveform")
+                            .foregroundStyle(.accentInk)
+                            .frame(width: 30)
+                            .accessibilityHidden(true)
+                    }
+
+                    ViewThatFits(in: .vertical) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            speechAccessoryTitle(title)
+                            if let subtitle {
+                                Text(subtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondaryInk)
+                                    .lineLimit(1)
+                            }
+                        }
+                        speechAccessoryTitle(title)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(speechAccessoryAccessibilityLabel)
+            .accessibilityLabel(SystemReadAloudBoardCopy.readerLabel(title: title, subtitle: subtitle))
+            .accessibilityHint("Opens the reader")
 
             Button { speech.toggle(from: nil) } label: {
                 Image(systemName: speech.isPlaying ? "pause.fill" : "play.fill")
-                    .foregroundStyle(.accentInk)
+                    .foregroundStyle(.primary)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
@@ -601,15 +628,25 @@ struct ContentView: View {
 
             Button { speech.stop() } label: {
                 Image(systemName: "stop.fill")
-                    .foregroundStyle(.accentInk)
+                    .foregroundStyle(.primary)
                     .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Stop Reading Aloud")
         }
-        .padding(.leading, 14)
+        .padding(.leading, 10)
         .padding(.trailing, 6)
+        // The system owns the accessory height. Keep the full title and position
+        // in its VoiceOver label when the visual title condenses to fit.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+
+    private func speechAccessoryTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
     }
 
     private func installSpeechPositionSaver() {
@@ -693,25 +730,9 @@ struct ContentView: View {
         return (try? context.fetch(descriptor))?.first
     }
 
-    private var speechMetadataIsConcealed: Bool {
-        guard let workID = speech.sessionWorkID else { return false }
-        let targetID = workID
-        var descriptor = FetchDescriptor<SavedWork>(
-            predicate: #Predicate { $0.id == targetID }
-        )
-        descriptor.fetchLimit = 1
-        guard let work = try? modelContext.fetch(descriptor).first else { return false }
-        return privacyGate.isConcealed(work, enabled: hideMature)
-    }
-
-    private var speechAccessoryTitle: String {
-        speechMetadataIsConcealed ? "Reading Aloud" : speech.sessionTitle
-    }
-
-    private var speechAccessoryAccessibilityLabel: String {
-        speechMetadataIsConcealed
-            ? "Open reader, Reading Aloud"
-            : "Open reader for \(speech.sessionTitle)"
+    private var speechAccessoryWork: SavedWork? {
+        guard let workID = speech.sessionWorkID else { return nil }
+        return savedWork(id: workID, in: modelContext)
     }
 
     private func openSpeechReader() {
@@ -982,4 +1003,22 @@ private struct WebKitPrewarmView: View {
             ReadingSession.self, ReadingFavorite.self, FandomReadWatermark.self,
             FollowedTag.self, TagAlias.self, SavedSeries.self
         ], inMemory: true)
+}
+
+enum SystemReadAloudBoardCopy {
+    static func subtitle(chapter: Int?, minutes: Int?) -> String? {
+        let parts: [String?] = [
+            chapter.map { "Chapter \($0)" },
+            minutes.map { "\(ReaderTimeEstimate.durationLabel(minutes: $0)) left" }
+        ]
+        let label = parts.compactMap { $0 }.joined(separator: " · ")
+        return label.isEmpty ? nil : label
+    }
+
+    static func readerLabel(title: String, subtitle: String?) -> String {
+        if let subtitle {
+            return "Now reading aloud: \(title), \(subtitle)"
+        }
+        return title == "Reading Aloud" ? title : "Now reading aloud: \(title)"
+    }
 }

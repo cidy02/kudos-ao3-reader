@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// One sheet for importing a backup, in place of a chain of alerts.
@@ -14,6 +15,7 @@ import SwiftUI
 /// second step of the same sheet rather than a new one.
 struct BackupImportSheet: View {
     let manifest: KudosBackupManifest
+    let archiveByteCount: Int?
     let localWorks: [SavedWork]
     /// Whether this library holds anything Replace would take away. Not the
     /// same as "has works": saved links, saved searches, collections and
@@ -27,7 +29,11 @@ struct BackupImportSheet: View {
     let onCancel: () -> Void
     let makePreReplaceBackup: () -> Result<String, Error>
 
+    @Environment(ThemeManager.self) private var themeManager
+
     private enum Step { case choose, replace }
+    private enum RestoreChoice { case merge, replace }
+    @State private var mode: RestoreChoice = .merge
     @State private var step: Step = .choose
 
     var body: some View {
@@ -50,58 +56,136 @@ struct BackupImportSheet: View {
 
     private var chooseStep: some View {
         NavigationStack {
-            Form {
-                Group {
-                    contentsSection
-                    mergeSection
-                    if hasReplaceableRecords { replaceSection }
-                }
-                .appThemedRows()
-            }
-            .appThemedScroll()
-            .navigationTitle("Import Backup")
-            #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-            #endif
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel", action: onCancel)
+            ScrollView {
+                VStack(spacing: 14) {
+                    contentsCard
+
+                    VStack(spacing: 0) {
+                        modeRow(.merge, title: "Merge with This Library",
+                                detail: "Keeps existing works and adds missing items from the backup")
+                        if hasReplaceableRecords {
+                            SubjectRowSeparator(inset: 16)
+                            modeRow(.replace, title: "Replace This Library",
+                                    detail: "Changes data included in the backup to match it")
+                        }
+                    }
+                    .background(themeManager.appTheme.cardSurface, in: cardShape)
+
+                    Button {
+                        if hasReplaceableRecords && mode == .replace {
+                            step = .replace
+                        } else {
+                            onMerge()
+                        }
+                    } label: {
+                        Text("Restore")
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.kudosPrimaryConfirm)
+
+                    if hasReplaceableRecords {
+                        Text("Works removed by Replace go to Recently Deleted. Review what will change "
+                            + "before confirming.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondaryInk)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
                     }
                 }
+                .padding(.horizontal, SubjectMetrics.gutter)
+                .padding(.vertical, 8)
+            }
+            .appScreenSurface(.grouped)
+            .navigationTitle("Restore Backup")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: onCancel)
+                }
+            }
         }
+        .presentationDragIndicator(.visible)
     }
 
-    private var contentsSection: some View {
-        Section("This backup") {
-            LabeledContent("Library records", value: "\(manifest.works.count)")
+    private var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+    }
+
+    private var contentsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(SystemBackupBoardCopy.title(exportedAt: manifest.exportedAt))
+                        .font(.headline)
+                    Text(SystemBackupBoardCopy.summary(
+                        works: manifest.works.count, queues: manifest.readingQueues.count,
+                        collections: manifest.collections.count, byteCount: archiveByteCount
+                    ))
+                    .font(.footnote)
+                    .foregroundStyle(.secondaryInk)
+                }
+            } icon: {
+                Image(systemName: "arrow.down.to.line")
+                    .foregroundStyle(.accentInk)
+                    .accessibilityHidden(true)
+            }
             LabeledContent("Saved links", value: "\(manifest.bookmarks.count)")
-            LabeledContent("Reading queues", value: "\(manifest.readingQueues.count)")
-            LabeledContent("Collections", value: "\(manifest.collections.count)")
+                .font(.footnote)
             LabeledContent("Custom fonts", value: "\(manifest.fonts.count)")
+                .font(.footnote)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(themeManager.appTheme.cardSurface, in: cardShape)
     }
 
-    private var mergeSection: some View {
-        Section {
-            Button("Merge", action: onMerge)
-        } footer: {
-            Text("Merge keeps everything already on this device and adds anything you don't "
-                + "have from the backup. It removes nothing.")
+    private func modeRow(_ value: RestoreChoice, title: String, detail: String) -> some View {
+        let selected = mode == value
+        return Button {
+            mode = value
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .font(.title3)
+                    .foregroundStyle(selected ? AnyShapeStyle(.accentInk) : AnyShapeStyle(.secondaryInk))
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).foregroundStyle(.primary)
+                    Text(detail).font(.footnote).foregroundStyle(.secondaryInk)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .frame(minHeight: 52)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityHint(detail)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+enum SystemBackupBoardCopy {
+    static func title(exportedAt: Date) -> String {
+        "Kudos backup, \(exportedAt.formatted(.dateTime.month(.abbreviated).day()))"
     }
 
-    /// Only offered when there is something to replace. On an empty library
-    /// Replace and Merge do the same thing, and offering the destructive
-    /// wording for it was never anything but a way to frighten someone.
-    private var replaceSection: some View {
-        Section {
-            Button("Replace Library…", role: .destructive) { step = .replace }
-        } footer: {
-            Text("Replace makes this device match the backup. Your works, reading positions, "
-                + "notes, collections, and queues change to match it. Items the backup does not list "
-                + "are removed, but a kind of data the backup leaves out entirely is kept. You "
-                + "will confirm before it starts, and Kudos saves a "
-                + "copy of your current library first.")
+    static func summary(works: Int, queues: Int, collections: Int, byteCount: Int?) -> String {
+        var parts = [
+            "\(works) work\(works == 1 ? "" : "s")",
+            "\(queues) queue\(queues == 1 ? "" : "s")",
+            "\(collections) collection\(collections == 1 ? "" : "s")"
+        ]
+        if let byteCount {
+            parts.append(LocalStorageFootprint.formatted(bytes: Int64(byteCount)))
         }
+        return parts.joined(separator: " · ")
     }
 }

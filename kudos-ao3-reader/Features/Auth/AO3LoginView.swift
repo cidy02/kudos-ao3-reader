@@ -7,10 +7,15 @@ nonisolated enum AO3InvitationRequest {
 /// AO3 accounts are invitation-based. Keep this as an inline text link on both
 /// account entry surfaces so it never reads like an alternate sign-in button.
 struct AO3InvitationRequestLink: View {
+    var showsExternalMark = true
     let onOpen: () -> Void
 
     var body: some View {
-        Text("No AO3 account? [Create one ↗](\(AO3InvitationRequest.url.absoluteString))")
+        let url = AO3InvitationRequest.url.absoluteString
+        let label: LocalizedStringKey = showsExternalMark
+            ? "No AO3 account? [Create one ↗](\(url))"
+            : "No AO3 account? [Create one](\(url))"
+        Text(label)
             .font(.subheadline)
             .foregroundStyle(.secondaryInk)
             .multilineTextAlignment(.center)
@@ -31,6 +36,7 @@ struct AO3LoginView: View {
     var contextMessage: String? = nil
     var contextURL: URL? = nil
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(AO3AuthService.self) private var auth
     @Environment(AppRouter.self) private var router
     @Environment(ThemeManager.self) private var themeManager
@@ -101,11 +107,13 @@ struct AO3LoginView: View {
                     } label: {
                         Image(systemName: "xmark")
                     }
-                    .accessibilityLabel("Cancel")
+                    .accessibilityLabel("Close")
                 }
             }
         }
+        #if os(macOS)
         .frame(minWidth: 360, minHeight: 440)
+        #endif
         .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(blocksInteractiveDismiss)
         .onChange(of: auth.isLoggedIn) { _, loggedIn in
@@ -142,22 +150,30 @@ struct AO3LoginView: View {
         ScrollView {
             VStack(spacing: 14) {
                 if let contextMessage {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label(contextMessage, systemImage: "lock")
-                            .font(.subheadline.weight(.semibold))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(contextMessage, systemImage: "lock.fill")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.accentInk)
+                            .accessibilityAddTraits(.isHeader)
+                        Text("The link you opened is to a work its author shows only to logged-in AO3 users. "
+                            + "Log in and it opens here.")
+                            .font(.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
                         if let contextURL {
                             Text(contextURL.absoluteString)
-                                .font(.caption)
+                                .font(.footnote)
+                                .foregroundStyle(.secondaryInk)
                                 .textSelection(.enabled)
                         }
                     }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
-                        .background(Color.orange.opacity(0.14), in: RoundedRectangle(cornerRadius: 16))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(themeManager.appTheme.cardSurface, in: cardShape)
                 }
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "lock")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(.accentInk)
                         .accessibilityHidden(true)
                     Text("Kudos submits these credentials only to AO3's official login page. "
                         + "Your password is never saved; only the session lives in this device's Keychain.")
@@ -165,11 +181,12 @@ struct AO3LoginView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
-                .background(themeManager.appTheme.cardSurface, in: RoundedRectangle(cornerRadius: 16))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(themeManager.appTheme.cardSurface, in: cardShape)
 
                 VStack(spacing: 0) {
-                    LabeledContent("Username") {
+                    credentialRow("Username") {
                         TextField("or email", text: $username,
                                   prompt: themeManager.appTheme.sepiaPrompt("or email"))
                             .textContentType(.username)
@@ -178,37 +195,28 @@ struct AO3LoginView: View {
                             .autocorrectionDisabled()
                         #endif
                             .submitLabel(.next)
-                            .multilineTextAlignment(.trailing)
                             .accessibilityLabel("Username or email")
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .frame(minHeight: 50)
 
                     Divider()
                         .padding(.leading, 16)
 
-                    LabeledContent("Password") {
-                        SecureField("Password", text: $password,
-                                    prompt: themeManager.appTheme.sepiaPrompt("Password"))
+                    credentialRow("Password") {
+                        SecureField("Password", text: $password, prompt: Text(""))
                             .textContentType(.password)
                             .submitLabel(.go)
                             .onSubmit { submit() }
-                            .multilineTextAlignment(.trailing)
                             .accessibilityLabel("Password")
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .frame(minHeight: 50)
                 }
-                .background(themeManager.appTheme.cardSurface, in: RoundedRectangle(cornerRadius: 16))
+                .background(themeManager.appTheme.cardSurface, in: cardShape)
 
                 if let error = auth.errorMessage {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(14)
-                        .background(themeManager.appTheme.cardSurface, in: RoundedRectangle(cornerRadius: 16))
+                        .background(themeManager.appTheme.cardSurface, in: cardShape)
                 }
 
                 loginButton
@@ -216,23 +224,43 @@ struct AO3LoginView: View {
                 Button("Forgot your password?") {
                     openOnAO3(Self.passwordResetURL)
                 }
+                .font(.subheadline)
                 .foregroundStyle(.accentInk)
 
-                AO3InvitationRequestLink {
+                AO3InvitationRequestLink(showsExternalMark: false) {
                     openOnAO3(AO3InvitationRequest.url)
                 }
-
-                Text("These open AO3 in Kudos. Come back here to log in afterwards.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondaryInk)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
+                .padding(.top, 6)
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
             .padding(.bottom, 24)
         }
         .appScreenSurface(.grouped)
+    }
+
+    private var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: SubjectMetrics.cornerRadius, style: .continuous)
+    }
+
+    private func credentialRow<Credential: View>(
+        _ title: String, @ViewBuilder credential: @escaping () -> Credential
+    ) -> some View {
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
+            Text(title)
+                .frame(width: stacked ? nil : 96, alignment: .leading)
+                .accessibilityHidden(true)
+            credential()
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(minHeight: 50)
     }
 
     /// Filled accent capsule when enabled. Disabled, an undimmed pale tint keeps
@@ -249,6 +277,7 @@ struct AO3LoginView: View {
                         .controlSize(.small)
                         .accentFill()
                     Text("Logging In…")
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("Log In")
                 }
@@ -267,7 +296,13 @@ struct AO3LoginView: View {
                 .padding(.horizontal, 22)
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, minHeight: 50)
-                .background(themeManager.effectiveTint.opacity(0.15), in: Capsule())
+                .background {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        cardShape.fill(themeManager.effectiveTint.opacity(0.15))
+                    } else {
+                        Capsule().fill(themeManager.effectiveTint.opacity(0.15))
+                    }
+                }
         }
     }
 
