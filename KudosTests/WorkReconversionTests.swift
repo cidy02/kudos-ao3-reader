@@ -171,10 +171,12 @@ struct WorkReconversionTests {
         let id = work.id
         work.isFavorite = true
         work.readiumLocator = "{\"href\":\"chapter-2.xhtml\"}"
+        let originalDate = Date(timeIntervalSince1970: 1_000)
         WorkConversionRecord(
             converterVersion: 1,
             format: ImportedFileFormat.plainText.rawValue,
-            originalFileName: source.lastPathComponent
+            originalFileName: source.lastPathComponent,
+            convertedAt: originalDate
         ).write(for: work.id)
 
         try await WorkReconversion.reconvert(work, in: context)
@@ -186,6 +188,7 @@ struct WorkReconversionTests {
         #expect(try EPUBDocument.inspectPackage(ofEPUBAt: work.fileURL).readableItemCount == 2)
         // And the record now says it is current, so it stops offering a rebuild.
         #expect(WorkConversionRecord.read(for: work.id)?.isStale == false)
+        #expect(WorkConversionRecord.read(for: work.id)?.convertedAt == originalDate)
         #expect(WorkReconversion.staleWorks(in: context).isEmpty)
     }
 

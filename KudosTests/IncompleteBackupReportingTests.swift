@@ -114,7 +114,7 @@ struct IncompleteBackupReportingTests {
 
         let skipped = try KudosBackupService.writeArchive(plan, to: destination)
 
-        #expect(skipped == ["Works/\(work.id.uuidString).epub"])
+        #expect(skipped.skippedEntries == ["Works/\(work.id.uuidString).epub"])
         // The export still succeeds — skipping is the right call, reporting is
         // the part that was missing.
         #expect(FileManager.default.fileExists(atPath: destination.path))

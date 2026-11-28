@@ -13,10 +13,22 @@ nonisolated struct KudosBackupExportPlan: Sendable {
     struct Asset: Sendable {
         let entryName: String
         let fileURL: URL
+        var originalWorkTitle: String? = nil
+        var requiresOriginalEntry: String? = nil
     }
 
     let manifestData: Data
     let assets: [Asset]
+    var missingOriginalTitles: [String] = []
+}
+
+nonisolated struct KudosBackupArchiveExportResult: Sendable {
+    let skippedEntries: [String]
+    let omittedOriginalTitles: [String]
+
+    var skippedOtherAssetCount: Int {
+        skippedEntries.filter { !$0.hasPrefix("Originals/") || $0.hasSuffix(Storage.conversionRecordSuffix) }.count
+    }
 }
 
 /// Why an export was refused before any archive bytes were written. The
@@ -71,6 +83,29 @@ nonisolated struct KudosBackupArchiveFile: Transferable {
 }
 
 extension KudosBackupService {
+    struct OriginalExportSource {
+        let title: String
+        let original: URL?
+        let record: URL?
+    }
+
+    /// A sidecar without its source still tells us which work is missing a file.
+    static func originalExportSources(for works: [SavedWork]) -> [OriginalExportSource] {
+        guard !works.isEmpty else { return [] }
+        let directory = Storage.originalsDirectory
+        let originals = Storage.existingOriginalDocumentURLs()
+        let names = Set((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? [])
+        var seen = Set<UUID>()
+        return works.sorted(by: { $0.id.uuidString < $1.id.uuidString }).compactMap { work in
+            guard seen.insert(work.id).inserted else { return nil }
+            let original = originals[work.id]
+            let recordURL = WorkConversionRecord.url(for: work.id, in: directory)
+            let record = names.contains(recordURL.lastPathComponent) ? recordURL : nil
+            guard original != nil || record != nil else { return nil }
+            return OriginalExportSource(title: work.title, original: original, record: record)
+        }
+    }
+
     /// Snapshots the manifest and the asset list for an export. Entry order
     /// matches `KudosBackupContents.zipData()` — manifest first, then assets
     /// sorted by name — so streamed and in-memory exports of identical
@@ -159,24 +194,26 @@ extension KudosBackupService {
         // from disk like every other asset, so a 200 MB PDF never has to be
         // resident — the reader's `.backup` limits (1 GB per entry, 64 GB
         // total) already cover anything a document import can produce.
-        let originals = works.isEmpty ? [:] : Storage.existingOriginalDocumentURLs()
-        for work in orderedWorks {
-            guard let original = originals[work.id] else { continue }
-            let entryName = "Originals/\(original.lastPathComponent)"
-            if seenNames.insert(entryName).inserted {
-                assets.append(.init(entryName: entryName, fileURL: original))
+        var missingOriginalTitles: [String] = []
+        for source in originalExportSources(for: orderedWorks) {
+            guard let original = source.original else {
+                missingOriginalTitles.append(source.title)
+                continue
             }
-            let record = WorkConversionRecord.url(for: work.id)
-            guard FileManager.default.fileExists(atPath: record.path) else { continue }
-            let recordName = "Originals/\(record.lastPathComponent)"
-            if seenNames.insert(recordName).inserted {
-                assets.append(.init(entryName: recordName, fileURL: record))
+            let entryName = "Originals/\(original.lastPathComponent)"
+            assets.append(.init(entryName: entryName, fileURL: original, originalWorkTitle: source.title))
+            if let record = source.record {
+                assets.append(.init(
+                    entryName: "Originals/\(record.lastPathComponent)", fileURL: record,
+                    requiresOriginalEntry: entryName
+                ))
             }
         }
 
         return KudosBackupExportPlan(
             manifestData: try KudosBackupContents(manifest: manifest).manifestData(),
-            assets: assets
+            assets: assets,
+            missingOriginalTitles: missingOriginalTitles
         )
     }
 
@@ -191,17 +228,13 @@ extension KudosBackupService {
     /// (including a source file changing size mid-stream) aborts and removes
     /// the partial file, so a torn archive is never left behind.
     ///
-    /// **Returns the entry names it skipped**, so a caller can say so. The skip
-    /// itself is right — one evicted file should not fail a whole export — but
-    /// it was silent, while the manifest goes on claiming those works have
-    /// EPUBs. A reader migrating to a new phone was told only how many records
-    /// went in, and found the gap when they opened the work.
+    /// Returns skipped entries and the titles of works whose originals were omitted.
     @discardableResult
     nonisolated static func writeArchive(
         _ plan: KudosBackupExportPlan,
         to destination: URL,
         limits: MiniZip.Limits = .backup
-    ) throws -> [String] {
+    ) throws -> KudosBackupArchiveExportResult {
         guard plan.assets.count + 1 <= limits.maxEntryCount else {
             throw KudosBackupExportError.tooManyEntries(
                 count: plan.assets.count + 1,
@@ -216,16 +249,19 @@ extension KudosBackupService {
             )
         }
         var includedAssets: [KudosBackupExportPlan.Asset] = []
-        var skipped: [String] = []
+        var skipped = Set<String>()
+        var omittedTitles = plan.missingOriginalTitles
+        func skip(_ asset: KudosBackupExportPlan.Asset) {
+            skipped.insert(asset.entryName)
+            if let title = asset.originalWorkTitle { omittedTitles.append(title) }
+        }
         var total = UInt64(plan.manifestData.count)
         for asset in plan.assets {
-            guard let probe = try? FileHandle(forReadingFrom: asset.fileURL),
-                  let size = try? probe.seekToEnd()
-            else {
-                skipped.append(asset.entryName)
+            if let required = asset.requiresOriginalEntry, skipped.contains(required) { continue }
+            guard let size = readableArchiveAssetSize(at: asset.fileURL) else {
+                skip(asset)
                 continue
             }
-            try? probe.close()
             guard size <= UInt64(limits.maxSingleEntryUncompressedSize) else {
                 throw KudosBackupExportError.assetTooLarge(
                     name: asset.entryName,
@@ -252,13 +288,13 @@ extension KudosBackupService {
             let writer = MiniZip.ArchiveWriter { try handle.write(contentsOf: $0) }
             try writer.append(name: "manifest.json", data: plan.manifestData)
             for asset in includedAssets {
+                if let required = asset.requiresOriginalEntry, skipped.contains(required) { continue }
                 // Re-probed just before appending: a file that vanished since
                 // the preflight is still a skip, not a failed export.
-                guard let probe = try? FileHandle(forReadingFrom: asset.fileURL) else {
-                    skipped.append(asset.entryName)
+                guard readableArchiveAssetSize(at: asset.fileURL) != nil else {
+                    skip(asset)
                     continue
                 }
-                try? probe.close()
                 try writer.append(name: asset.entryName, contentsOf: asset.fileURL)
             }
             try writer.finish()
@@ -268,6 +304,16 @@ extension KudosBackupService {
             try? fm.removeItem(at: destination)
             throw error
         }
-        return skipped
+        return KudosBackupArchiveExportResult(
+            skippedEntries: skipped.sorted(), omittedOriginalTitles: omittedTitles.sorted()
+        )
+    }
+
+    private nonisolated static func readableArchiveAssetSize(at url: URL) -> UInt64? {
+        guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+              let probe = try? FileHandle(forReadingFrom: url)
+        else { return nil }
+        defer { try? probe.close() }
+        return try? probe.seekToEnd()
     }
 }

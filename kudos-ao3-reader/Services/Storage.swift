@@ -105,7 +105,9 @@ nonisolated enum Storage {
     /// Any preserved original for this work, whatever its extension. Used by
     /// deletion (to avoid orphans) and, later, by the provenance UI.
     static func existingOriginalDocumentURL(for id: UUID, in directory: URL? = nil) -> URL? {
-        originalDirectoryContents(in: directory).first { isOriginalDocument($0, for: id) }
+        let directory = directory ?? originalsDirectory
+        let candidates = originalDocuments(for: id, in: directory)
+        return preferredOriginal(candidates, for: id, in: directory)
     }
 
     /// An older re-import under a different extension could leave both copies.
@@ -119,21 +121,36 @@ nonisolated enum Storage {
         return name.hasPrefix(id.uuidString) && !name.hasSuffix(conversionRecordSuffix)
     }
 
-    /// Snapshot the first original per work for a bulk lookup. Keep directory
-    /// enumeration order and the single lookup's case-sensitive UUID prefix
-    /// match, including older filenames that use more than just an extension.
+    /// Snapshot originals for a bulk lookup, including legacy names.
     static func existingOriginalDocumentURLs() -> [UUID: URL] {
-        var originals: [UUID: URL] = [:]
-        for url in originalDirectoryContents() {
+        let directory = originalsDirectory
+        var originals: [UUID: [URL]] = [:]
+        for url in originalDirectoryContents(in: directory) {
             let name = url.lastPathComponent
             let prefix = String(name.prefix(36))
             guard !name.hasSuffix(conversionRecordSuffix),
-                  let id = UUID(uuidString: prefix), id.uuidString == prefix,
-                  originals[id] == nil
+                  let id = UUID(uuidString: prefix), id.uuidString == prefix
             else { continue }
-            originals[id] = url
+            originals[id, default: []].append(url)
         }
-        return originals
+        return Dictionary(uniqueKeysWithValues: originals.compactMap { id, candidates in
+            preferredOriginal(candidates, for: id, in: directory).map { (id, $0) }
+        })
+    }
+
+    private static func preferredOriginal(_ candidates: [URL], for id: UUID, in directory: URL) -> URL? {
+        guard candidates.count > 1 else { return candidates.first }
+        // A failed cleanup or interrupted older import may leave a sibling.
+        // Prefer the file named by the committed record when it disambiguates.
+        let recordURL = WorkConversionRecord.url(for: id, in: directory)
+        if let data = try? Data(contentsOf: recordURL),
+           let record = try? JSONDecoder().decode(WorkConversionRecord.self, from: data) {
+            let expected = originalDocumentURL(for: id, fileExtension: record.originalPathExtension, in: directory)
+            if let match = candidates.first(where: { $0.lastPathComponent == expected.lastPathComponent }) {
+                return match
+            }
+        }
+        return candidates.first
     }
 
     private static func originalDirectoryContents(in directory: URL? = nil) -> [URL] {

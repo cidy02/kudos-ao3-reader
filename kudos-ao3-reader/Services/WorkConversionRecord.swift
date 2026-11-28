@@ -16,6 +16,7 @@ nonisolated struct WorkConversionRecord: Codable, Equatable, Sendable {
     /// `ImportedFileFormat.rawValue` the work was converted from.
     var format: String
     var originalFileName: String
+    /// When this source was imported. Rebuilding its EPUB keeps the same date.
     var convertedAt: Date
 
     init(
@@ -38,6 +39,11 @@ nonisolated struct WorkConversionRecord: Codable, Equatable, Sendable {
     var isStale: Bool {
         (converterPlatform == nil || converterPlatform == "ios")
             && converterVersion < ImportedDocumentConverter.converterVersion
+    }
+
+    var originalPathExtension: String {
+        let sourceExtension = (originalFileName as NSString).pathExtension
+        return sourceExtension.isEmpty ? format : sourceExtension
     }
 
     // MARK: - Storage
