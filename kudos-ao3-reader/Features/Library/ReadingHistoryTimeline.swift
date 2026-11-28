@@ -224,6 +224,26 @@ nonisolated struct ReadingHistoryTimeline: Equatable, Sendable {
 
     // MARK: Building
 
+    nonisolated struct OffTimeline: Equatable, Sendable {
+        let unloggedWorkIDs: Set<UUID>
+        let summaries: [UUID: WorkReadingSummary]
+
+        @MainActor
+        static func load(
+            visibleWorkIDs: Set<UUID>,
+            abandonedWorkIDs: Set<UUID>,
+            in context: ModelContext
+        ) throws -> OffTimeline {
+            let otherWorkIDs = visibleWorkIDs.subtracting(abandonedWorkIDs)
+            let logged = try ReadingLogService.loggedWorkIDs(in: context, among: otherWorkIDs)
+            let abandonedHistory = try ReadingLogService.history(for: abandonedWorkIDs, in: context)
+            return OffTimeline(
+                unloggedWorkIDs: otherWorkIDs.subtracting(logged),
+                summaries: ReadingLogService.summaries(from: abandonedHistory)
+            )
+        }
+    }
+
     @MainActor
     static func make(
         scope: ReadingHistoryScope,
@@ -260,7 +280,7 @@ nonisolated struct ReadingHistoryTimeline: Equatable, Sendable {
                     knownStreakDays: streakDays)
     }
 
-    private static func interval(for scope: ReadingHistoryScope, containing reference: Date, calendar: Calendar)
+    static func interval(for scope: ReadingHistoryScope, containing reference: Date, calendar: Calendar)
         -> DateInterval {
         calendar.dateInterval(of: scope.component, for: reference)
             ?? DateInterval(start: calendar.startOfDay(for: reference), duration: 86_400)

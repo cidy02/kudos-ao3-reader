@@ -56,6 +56,15 @@ extension PersistenceGateSuites.LibraryScaleBenchmarkTests {
             "works_finished_this_week": stats.finishedCount
         ])
 
+        // What Home itself runs since T-568 step 5b: the week's rows plus a bounded streak lookback.
+        let boundedStarted = ContinuousClock.now
+        let bounded = try HomeReadingStats.calculate(in: context, now: anchor, calendar: calendar)
+        let boundedSeconds = benchmarkSeconds(since: boundedStarted)
+        #expect(bounded == stats)
+        try report.record("home_weekly_stats_bounded", for: fixture, seconds: boundedSeconds, counts: [
+            "works_finished_this_week": bounded.finishedCount
+        ])
+
         let visible = Self.libraryVisibility()
         let shelfStarted = ContinuousClock.now
         let readingNow = HomeSectionKind.readingNow.works(from: works, visible: visible)
